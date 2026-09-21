@@ -6,7 +6,7 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "qq-music-api"
-database_id = "7bc3ff53-0a75-498a-a445-4ba2f7b75afb" 
+database_id = "d5db47ba-5405-4ce8-98a3-4b1419a070e5" 
 
 # 定时刷新凭证 (每天凌晨 3 点)
 [triggers]
