@@ -7,7 +7,11 @@ compatibility_date = "2024-01-01"
 binding = "DB"
 database_name = "qq-music-api2"
 database_id = "897b4104-0aff-43a9-9918-a75efb002f07" 
-preview_database_id= "694526c5-dc29-457b-86bd-de0ac950715a" 
+
+
+ [[previews.d1_databases]] 
+ binding = “DB” 
+ database_id = “694526c5-dc29-457b-86bd-de0ac950715a” 
 # 定时刷新凭证 (每天凌晨 3 点)
 [triggers]
 crons = ["0 3 * * *"]
