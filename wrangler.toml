@@ -4,7 +4,7 @@ compatibility_date = "2024-01-01"
 
 # D1 数据库绑定
 [[previews.d1_databases]] 
- binding = “DB1” 
+ binding = “DB11” 
  database_name = "qq-music-api2"
  database_id = "694526c5-dc29-457b-86bd-de0ac950715a"
 
