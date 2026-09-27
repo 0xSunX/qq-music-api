@@ -20,16 +20,11 @@ import { API_CONFIG } from "../lib/common.js";
  * @returns {Promise<object>}
  */
 async function refreshCredential(credential) {
-    if (!credential.refresh_key) {
-        throw new Error("缺少 refresh_key，请检查凭证是否包含 refresh_key 字段");
-    }
-
     if (!credential.refresh_token) {
         throw new Error("缺少 refresh_token，请检查凭证是否包含 refresh_token 字段");
     }
 
     const params = {
-        refresh_key: credential.refresh_key,
         refresh_token: credential.refresh_token,
         musickey: credential.musickey,
         musicid: parseInt(credential.musicid) || 0,  // 必须是整数
@@ -136,7 +131,6 @@ async function doRefresh(db, force = false, envCredential = null) {
             ...credential,
             musickey: newData.musickey || credential.musickey,
             musicid: newData.musicid || credential.musicid,
-            refresh_key: newData.refresh_key || credential.refresh_key,
             refresh_token: newData.refresh_token || credential.refresh_token,
             musickey_createtime: now,
             key_expires_in: newData.keyExpiresIn || 259200,

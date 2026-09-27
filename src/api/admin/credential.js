@@ -47,7 +47,10 @@ export async function onRequest(context) {
         // 管理侧回传完整凭证(admin 专属, 不脱敏)
         const credential = await getCredentialFromDB(env.DB);
         if (!credential) return jsonResponse({ credential: null });
-        return jsonResponse({ credential });
+        // 剔除 refresh_key, 不再对外暴露该字段
+        const safe = Object.assign({}, credential);
+        delete safe.refresh_key;
+        return jsonResponse({ credential: safe });
     }
 
     return errorResponse("Method not allowed", 405);
