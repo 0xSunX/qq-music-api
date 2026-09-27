@@ -98,8 +98,11 @@ export async function apiRequest(module, method, params, credential = null) {
         throw new Error("Invalid response structure");
     }
 
-    if (result.code !== 0) {
-        throw new Error(`API error: code=${result.code}`);
+    // 有些接口成功时 code 未必为 0(或为 undefined),只要 data 存在就放行
+    // 只有 code 明确非 0 且带 subcode 时才视为业务错误
+    if (result.code !== 0 && result.code !== undefined && result.code !== null && !result.data) {
+        const sub = result.subcode ? ` subcode=${result.subcode}` : "";
+        throw new Error(`API error: code=${result.code}${sub}`);
     }
 
     return result.data || result;

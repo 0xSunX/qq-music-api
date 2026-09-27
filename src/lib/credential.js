@@ -172,3 +172,56 @@ export async function saveCredentialToDB(db, credential) {
         ).run();
     }
 }
+
+/**
+ * 从环境变量同步凭证到数据库
+ * 只要 INITIAL_CREDENTIAL 与库中 musickey 不一致就覆盖，解决"改 Secret 不生效"
+ * @param {D1Database} db
+ * @param {string} envCredential INITIAL_CREDENTIAL 原始字符串
+ * @returns {Promise<{synced: boolean, reason: string, credential: object|null}>}
+ */
+export async function syncCredentialFromEnv(db, envCredential) {
+    // 表不存在时先建表,否则首次调用会直接抛
+    await ensureCredentialTable(db);
+
+    const current = await getCredentialFromDB(db);
+
+    if (!envCredential) {
+        return {
+            synced: false,
+            reason: current ? "未设置 INITIAL_CREDENTIAL,使用数据库凭证" : "未设置 INITIAL_CREDENTIAL 且数据库为空",
+            credential: current
+        };
+    }
+
+    let parsed = null;
+    try {
+        parsed = parseCredential(envCredential);
+    } catch (e) {
+        return { synced: false, reason: `INITIAL_CREDENTIAL 解析异常: ${e.message}`, credential: current };
+    }
+
+    if (!parsed) {
+        return { synced: false, reason: "INITIAL_CREDENTIAL 解析失败(JSON 格式无效)", credential: current };
+    }
+    if (!parsed.musicid || !parsed.musickey) {
+        return { synced: false, reason: "INITIAL_CREDENTIAL 缺少 musicid 或 musickey", credential: current };
+    }
+    if (current && current.musickey === parsed.musickey) {
+        return { synced: false, reason: "数据库凭证已是最新", credential: current };
+    }
+
+    await saveCredentialToDB(db, parsed);
+    return { synced: true, reason: "已从 INITIAL_CREDENTIAL 同步到数据库", credential: parsed };
+}
+
+/**
+ * 统一凭证获取入口:各 API 直接 import 这个,不要再各自实现
+ * @param {object} env Workers 环境(需含 DB,可选 INITIAL_CREDENTIAL)
+ * @returns {Promise<object|null>}
+ */
+export async function getCredential(env) {
+    if (!env || !env.DB) return null;
+    const sync = await syncCredentialFromEnv(env.DB, env.INITIAL_CREDENTIAL);
+    return sync.credential;
+}

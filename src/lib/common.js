@@ -42,26 +42,6 @@ export function hash33(s, h = 0) {
 }
 
 /**
- * 计算 MD5 - 使用 Web Crypto API
- * @param  {...string|Uint8Array} inputs 
- * @returns {Promise<string>}
- */
-export async function calcMd5(...inputs) {
-    const encoder = new TextEncoder();
-    const data = [];
-    for (const input of inputs) {
-        if (typeof input === "string") {
-            data.push(...encoder.encode(input));
-        } else if (input instanceof Uint8Array) {
-            data.push(...input);
-        }
-    }
-    const hashBuffer = await crypto.subtle.digest("MD5", new Uint8Array(data));
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-/**
  * API 配置
  */
 export const API_CONFIG = {
