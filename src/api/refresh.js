@@ -1,6 +1,6 @@
 /**
  * Cloudflare Pages Function - 凭证刷新
- * POST /api/refresh - 手动刷新凭证
+ * POST /api/credential/refresh - 手动刷新凭证
  * Cron triggered - 自动刷新
  */
 
@@ -98,8 +98,8 @@ async function refreshCredential(credential) {
 async function doRefresh(db, force = false, envCredential = null) {
     await ensureCredentialTable(db);
 
-    // 先尝试用环境变量同步:musickey 变了就覆盖库中旧凭证
-    // 这样在 dashboard 改了 INITIAL_CREDENTIAL 后 refresh 也能拿到新凭证
+    // 环境变量仅作首次种子: 库为空时用它初始化, 库非空不覆盖
+    // 刷新成功后写回数据库的新凭证不会再被环境变量顶掉
     if (envCredential) {
         try {
             const sync = await syncCredentialFromEnv(db, envCredential);
@@ -107,7 +107,7 @@ async function doRefresh(db, force = false, envCredential = null) {
                 console.log(`[Refresh] ${sync.reason}`);
             }
         } catch (e) {
-            console.warn("[Refresh] 环境变量同步失败:", e.message);
+            console.warn("[Refresh] 环境变量种子失败:", e.message);
         }
     }
 
@@ -168,7 +168,7 @@ export async function onSchedule(context) {
 
 /**
  * HTTP 触发器
- * POST /api/refresh - 手动刷新
+ * POST /api/credential/refresh - 手动刷新
  */
 export async function onRequest(context) {
     const { request, env } = context;

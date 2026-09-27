@@ -34,22 +34,17 @@ export async function onRequest(context) {
             }, 404);
         }
 
-        // 构建返回格式
-        const response = {
+        // 脱敏返回: 普通登录用户不应拿到全站共用的密钥与 token
+        return jsonResponse({
             credential: {
-                ...credential,
+                musicid: credential.musicid,
+                login_type: credential.login_type,
                 extra_fields: {
                     musickeyCreateTime: credential.musickey_createtime,
                     keyExpiresIn: credential.key_expires_in,
                 },
             },
-        };
-
-        // 移除内部字段
-        delete response.credential.musickey_createtime;
-        delete response.credential.key_expires_in;
-
-        return jsonResponse(response);
+        });
 
     } catch (err) {
         console.error("读取凭证失败:", err);

@@ -174,8 +174,9 @@ export async function saveCredentialToDB(db, credential) {
 }
 
 /**
- * 从环境变量同步凭证到数据库
- * 只要 INITIAL_CREDENTIAL 与库中 musickey 不一致就覆盖，解决"改 Secret 不生效"
+ * 环境变量凭证种子
+ * 仅在数据库为空时用 INITIAL_CREDENTIAL 初始化; 库非空一律以库为准,
+ * 之后由 /api/credential/refresh 自动续期或 /api/admin/credential 手动更新, 环境变量不再覆盖。
  * @param {D1Database} db
  * @param {string} envCredential INITIAL_CREDENTIAL 原始字符串
  * @returns {Promise<{synced: boolean, reason: string, credential: object|null}>}
@@ -186,33 +187,32 @@ export async function syncCredentialFromEnv(db, envCredential) {
 
     const current = await getCredentialFromDB(db);
 
+    // 库中已有凭证: 环境变量不再参与, 直接返回库中凭证
+    if (current) {
+        return { synced: false, reason: "数据库已有凭证, INITIAL_CREDENTIAL 仅作首次种子", credential: current };
+    }
+
     if (!envCredential) {
-        return {
-            synced: false,
-            reason: current ? "未设置 INITIAL_CREDENTIAL,使用数据库凭证" : "未设置 INITIAL_CREDENTIAL 且数据库为空",
-            credential: current
-        };
+        return { synced: false, reason: "未设置 INITIAL_CREDENTIAL 且数据库为空", credential: null };
     }
 
     let parsed = null;
     try {
         parsed = parseCredential(envCredential);
     } catch (e) {
-        return { synced: false, reason: `INITIAL_CREDENTIAL 解析异常: ${e.message}`, credential: current };
+        return { synced: false, reason: `INITIAL_CREDENTIAL 解析异常: ${e.message}`, credential: null };
     }
 
     if (!parsed) {
-        return { synced: false, reason: "INITIAL_CREDENTIAL 解析失败(JSON 格式无效)", credential: current };
+        return { synced: false, reason: "INITIAL_CREDENTIAL 解析失败(JSON 格式无效)", credential: null };
     }
     if (!parsed.musicid || !parsed.musickey) {
-        return { synced: false, reason: "INITIAL_CREDENTIAL 缺少 musicid 或 musickey", credential: current };
-    }
-    if (current && current.musickey === parsed.musickey) {
-        return { synced: false, reason: "数据库凭证已是最新", credential: current };
+        return { synced: false, reason: "INITIAL_CREDENTIAL 缺少 musicid 或 musickey", credential: null };
     }
 
+    // 仅在库为空时写入种子
     await saveCredentialToDB(db, parsed);
-    return { synced: true, reason: "已从 INITIAL_CREDENTIAL 同步到数据库", credential: parsed };
+    return { synced: true, reason: "已用 INITIAL_CREDENTIAL 初始化数据库", credential: parsed };
 }
 
 /**

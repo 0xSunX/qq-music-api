@@ -86,9 +86,8 @@ export async function registerUser(db, username, password, deviceId) {
     const salt = randomHex(16);
     const hash = await hashPassword(password, salt);
     const now = Math.floor(Date.now() / 1000);
-    // 首个注册用户自动成为管理员
-    const cnt = await db.prepare('SELECT COUNT(*) AS c FROM users').first();
-    const role = (cnt && cnt.c > 0) ? 'user' : 'admin';
+    // 管理员只能通过 /api/setup 初始化创建, 注册一律为普通用户
+    const role = 'user';
     try {
         const r = await db.prepare(`INSERT INTO users
             (username, password_hash, salt, role, device_id, daily_limit, created_at, updated_at)
@@ -156,9 +155,28 @@ export async function getUsageToday(db, userId) {
     return row ? row.count : 0;
 }
 
-export async function incrUsage(db, userId) {
-    await db.prepare(`INSERT INTO usage_daily (user_id, date, count) VALUES (?, ?, 1)
-        ON CONFLICT(user_id, date) DO UPDATE SET count = count + 1`)
+/**
+ * 原子占用一次配额: 单条 SQL 内完成"检查+递增", 消除 check-then-act 竞态
+ * @param {D1Database} db
+ * @param {number} userId
+ * @param {number} limit 当前用户日限额
+ * @returns {Promise<boolean>} true=占用成功; false=已达限额
+ */
+export async function reserveUsage(db, userId, limit) {
+    const r = await db.prepare(`INSERT INTO usage_daily (user_id, date, count) VALUES (?, ?, 1)
+        ON CONFLICT(user_id, date) DO UPDATE SET count = count + 1 WHERE usage_daily.count < ?`)
+        .bind(userId, todayStr(), limit).run();
+    // changes>0: 新插入(count=1)或条件更新命中; changes=0: WHERE 未满足, 已超限
+    return !!(r.meta && r.meta.changes > 0);
+}
+
+/**
+ * 业务失败时回滚一次已占用配额(仅当 reserveUsage 成功过)
+ * count>0 兜底, 并发下最坏偏差 ±1, 不影响限流正确性
+ */
+export async function releaseUsage(db, userId) {
+    await db.prepare(`UPDATE usage_daily SET count = count - 1
+        WHERE user_id = ? AND date = ? AND count > 0`)
         .bind(userId, todayStr()).run();
 }
 

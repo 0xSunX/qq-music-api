@@ -29,19 +29,6 @@ export function getSearchID() {
 }
 
 /**
- * Hash33 算法
- * @param {string} s 
- * @param {number} h 
- * @returns {number}
- */
-export function hash33(s, h = 0) {
-    for (const c of s) {
-        h = (h << 5) + h + c.charCodeAt(0);
-    }
-    return 2147483647 & h;
-}
-
-/**
  * API 配置
  */
 export const API_CONFIG = {

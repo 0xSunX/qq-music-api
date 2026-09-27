@@ -17,18 +17,18 @@ import * as singer from "./api/singer.js";
 import * as top from "./api/top.js";
 import * as appUpdate from "./api/app/update.js";
 import * as appNotice from "./api/app/notice.js";
-import * as admin from "./admin.js";
+import * as adminCredential from "./api/admin/credential.js";
 import * as userApi from "./api/user.js";
 import * as adminUsers from "./api/admin/users.js";
 import * as adminPage from "./api/admin/page.js";
-import * as sunadmin from "./api/sunadmin.js";
+import * as setup from "./api/setup.js";
 import { ensureStatsTable, incrementCount, getTotalCount, getAllStats } from "./lib/stats.js";
-import { ensureUserTables, verifySession, getUsageToday, incrUsage } from "./lib/user.js";
+import { ensureUserTables, verifySession, reserveUsage, releaseUsage } from "./lib/user.js";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
 /**
@@ -36,7 +36,7 @@ const corsHeaders = {
  */
 const routes = {
     "/api/credential": credential,
-    "/api/refresh": refresh,
+    "/api/credential/refresh": refresh,
     "/api/search": search,
     "/api/song/url": songUrl,
     "/api/song/detail": songDetail,
@@ -51,13 +51,15 @@ const routes = {
     "/api/user": userApi,
     "/api/admin/users": adminUsers,
     "/admin/users": adminPage,
-    "/admin/credential": admin,
-    "/sunadmin": sunadmin,
+    "/api/admin/credential": adminCredential,
+    "/api/setup": setup,
 };
 
 // 免鉴权的公开路由(register/login 额外豁免)
 // /admin 是控制台页面, 前端密码登录; /admin/users 复用同一 token
-const PUBLIC_ROUTES = ["/admin", "/admin/users", "/admin/credential", "/sunadmin"];
+const PUBLIC_ROUTES = ["/admin", "/admin/users", "/api/setup"];
+// 需 admin 角色的数据接口(登录后仍要校验角色)
+const ADMIN_ROUTES = ["/api/admin/users", "/api/admin/credential"];
 
 // 需要统计的 API 端点
 const statsEndpoints = [
@@ -72,6 +74,7 @@ const statsEndpoints = [
     "/api/top",
     "/api/app/update",
     "/api/app/notice",
+    "/api/credential/refresh",
 ];
 
 /**
@@ -293,17 +296,22 @@ function generateConsoleHtml(totalCount) {
     <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/app/update</span></div><p class="d">获取 APP 更新配置(版本比对与强制更新判断)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">platform</span><span class="r">*</span></td><td>string</td><td>android / ios</td></tr><tr><td><span class="pm">version</span></td><td>string</td><td>客户端当前版本,如 1.2.0</td></tr><tr><td><span class="pm">build</span></td><td>int</td><td>构建号,用于强制更新判断</td></tr><tr><td><span class="pm">channel</span></td><td>string</td><td>渠道,默认 official</td></tr></table><div class="ex">GET /api/app/update?platform=android&version=1.0.0&build=80</div><p class="d">返回 hasUpdate / forceUpdate / latestVersion / changelog / downloadUrl / fileHash 等字段</p></div>
     <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/app/notice</span></div><p class="d">获取 APP 公告(支持平台/版本/渠道过滤与定时上下线)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">platform</span></td><td>string</td><td>android / ios,不传返回全平台</td></tr><tr><td><span class="pm">version</span></td><td>string</td><td>客户端版本,用于版本限定公告</td></tr><tr><td><span class="pm">channel</span></td><td>string</td><td>渠道,默认 official</td></tr></table><div class="ex">GET /api/app/notice?platform=android&version=1.2.0</div><p class="d">返回 notices 数组(type/level/title/content/actionUrl/forceShow)及 serverTime</p></div>
     <h2>用户系统</h2>
-    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=register</span></div><p class="d">注册账号(同一设备仅能注册一个)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">username</span><span class="r">*</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span><span class="r">*</span></td><td>string</td><td>至少 6 位</td></tr><tr><td><span class="pm">deviceId</span><span class="r">*</span></td><td>string</td><td>设备指纹</td></tr></table><div class="ex">POST /api/user?action=register{ "username":"test", "password":"123456", "deviceId":"abc123" }</div><p class="d">首个注册用户自动成为管理员</p></div>
+    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=register</span></div><p class="d">注册账号(同一设备仅能注册一个)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">username</span><span class="r">*</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span><span class="r">*</span></td><td>string</td><td>至少 6 位</td></tr><tr><td><span class="pm">deviceId</span><span class="r">*</span></td><td>string</td><td>设备指纹</td></tr></table><div class="ex">POST /api/user?action=register{ "username":"test", "password":"123456", "deviceId":"abc123" }</div><p class="d">注册用户均为普通用户, 管理员需通过 /api/setup 初始化创建</p></div>
     <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=login</span></div><p class="d">登录, 返回 token 用于后续接口鉴权</p><div class="ex">POST /api/user?action=login{ "username":"test", "password":"123456" }</div><p class="d">返回 token, 后续请求头带: Authorization: Bearer 你的token</p></div>
     <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=logout</span></div><p class="d">登出, 注销当前 token</p></div>
     <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/user?action=me</span></div><p class="d">查询当前用户信息与今日用量(需 token)</p><div class="ex">GET /api/user?action=meAuthorization: Bearer 你的token</div></div>
     <h2>用户规则</h2>
-    <div class="e"><table><tr><th>等级</th><th>调用限制</th><th>说明</th></tr><tr><td><span class="tag tag-normal" style="padding:2px 8px;border-radius:4px;background:#333;color:#aaa">普通用户</span></td><td>每日 50 次</td><td>超出返回 429</td></tr><tr><td><span class="tag tag-vip" style="padding:2px 8px;border-radius:4px;background:#f0a020;color:#000">VIP 用户</span></td><td>无限制</td><td>不限调用次数</td></tr></table><p class="d">所有 /api/ 接口(除注册登录外)均需携带 Bearer token。普通用户仅统计类接口计数。</p></div>
+    <div class="e"><table><tr><th>等级</th><th>调用限制</th><th>说明</th></tr><tr><td><span class="tag tag-normal" style="padding:2px 8px;border-radius:4px;background:#333;color:#aaa">普通用户</span></td><td>每日 50 次</td><td>超出返回 429</td></tr><tr><td><span class="tag tag-vip" style="padding:2px 8px;border-radius:4px;background:#f0a020;color:#000">VIP 用户</span></td><td>无限制</td><td>不限调用次数</td></tr></table><p class="d">鉴权规则: 公开端点仅 /api/user?action=register|login 与 /api/setup(站点初始化); 其余 /api/ 接口均需请求头 Authorization: Bearer 你的token; /api/admin/* 额外要求账号 role=admin。普通用户仅统计类接口计入日限额, VIP 不限。</p></div>
     <h2>管理接口</h2>
     <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/admin/users?action=list</span></div><p class="d">用户列表(需 admin), 支持 page/size 分页</p><div class="ex">GET /api/admin/users?action=list&page=1&size=20Authorization: Bearer 管理员token</div></div>
     <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=level</span></div><p class="d">修改用户等级(normal/vip)</p><div class="ex">POST /api/admin/users?action=level{ "userId":2, "level":"vip" }</div></div>
     <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=status</span></div><p class="d">禁用/启用用户(status: 1启用 0禁用)</p><div class="ex">POST /api/admin/users?action=status{ "userId":2, "status":0 }</div></div>
     <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=delete</span></div><p class="d">删除用户(级联清理会话与用量)</p><div class="ex">POST /api/admin/users?action=delete{ "userId":2 }</div></div>
+    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/admin/users?action=detail</span></div><p class="d">单个用户详情(含设备ID与时间戳, 需 admin)</p><div class="ex">GET /api/admin/users?action=detail&userId=2</div></div>
+    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=update</span></div><p class="d">部分更新用户(用户名/密码/日限额/等级/状态; 改密强制下线)</p><div class="ex">POST /api/admin/users?action=update{ "userId":2, "dailyLimit":100, "level":"vip" }</div></div>
+    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/admin/credential</span></div><p class="d">查看凭证状态(脱敏, 只回 musicid/登录类型/有效期, 需 admin)</p><div class="ex">GET /api/admin/credential</div></div>
+    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/credential</span></div><p class="d">更新 QQ 音乐凭证(需 admin, body 或 body.credential)</p><div class="ex">POST /api/admin/credential{ "musicid":"xxx", "musickey":"xxx" }</div></div>
+    <div class="e"><div class="h"><span class="m">GET/POST</span><span class="p">/api/setup</span></div><p class="d">站点初始化: GET 查看状态, POST 清库并创建初始管理员(检测到已有 admin 即锁定)</p><div class="ex">POST /api/setup{ "username":"admin", "password":"******" }</div></div>
     <div class="e"><div class="h"><span class="m">PAGE</span><span class="p">/admin/users</span></div><p class="d">图形化管理后台, 填入管理员 token 后可增删改查用户</p><div class="ex"><a href="/admin/users" style="color:#31c27c">打开用户管理后台 →</a></div></div>
     <footer><a href="https://doc.ygking.top">文档</a> · <a href="https://github.com/tooplick/qq-music-api">GitHub</a></footer>
 </div>
@@ -322,7 +330,10 @@ function generateConsoleHtml(totalCount) {
     {path:'/api/app/update',method:'GET',desc:'APP 更新配置(版本比对/强制更新)',params:[{k:'platform',v:'android',req:1},{k:'version',v:'1.0.0'},{k:'build',v:'80'}]},
     {path:'/api/app/notice',method:'GET',desc:'APP 公告(平台/版本/渠道过滤)',params:[{k:'platform',v:'android'},{k:'version',v:'1.2.0'}]},
     {path:'/api/credential',method:'GET',desc:'读取当前凭证',params:[]},
-    {path:'/api/refresh',method:'POST',desc:'手动刷新凭证(force=true 强制刷新)',params:[{k:'force',v:'true'}],body:'{}'}
+    {path:'/api/credential/refresh',method:'POST',desc:'手动刷新凭证(force=true 强制刷新)',params:[{k:'force',v:'true'}],body:'{}'},
+    {path:'/api/admin/users',method:'GET',desc:'用户列表/详情(需 admin, action=list|detail)',params:[{k:'action',v:'list'},{k:'page',v:'1'},{k:'size',v:'20'}]},
+    {path:'/api/admin/credential',method:'GET',desc:'查看凭证状态(脱敏, 需 admin)',params:[]},
+    {path:'/api/setup',method:'GET',desc:'站点初始化状态(公开)',params:[]}
   ];
   var NL = String.fromCharCode(10);
   var sel = document.getElementById('at-endpoint');
@@ -387,12 +398,16 @@ function generateConsoleHtml(totalCount) {
     if(!api) return;
     var url = buildUrl();
     var opts = { method: api.method };
+    var hdrs = {};
+    var tk = localStorage.getItem('adminToken');
+    if(tk) hdrs['Authorization'] = 'Bearer ' + tk;
     if(api.method === 'POST'){
       var raw = bodyBox.value.trim() || '{}';
       try { JSON.parse(raw); } catch(e){ statusEl.innerHTML = '\u003cspan class="err"\u003eBody JSON 格式错误\u003c/span\u003e'; return; }
-      opts.headers = { 'Content-Type': 'application/json' };
+      hdrs['Content-Type'] = 'application/json';
       opts.body = raw;
     }
+    opts.headers = hdrs;
     statusEl.textContent = '请求中...';
     resp.textContent = api.method + ' ' + url + NL + '请求中...';
     var t0 = Date.now();
@@ -484,6 +499,7 @@ export default {
 
             // 认证 + 限流中间件
             let currentUser = null;
+            let usageReserved = false;
             const isPublic = PUBLIC_ROUTES.includes(path);
             const urlObj = new URL(request.url);
             const action = urlObj.searchParams.get("action") || "";
@@ -499,20 +515,26 @@ export default {
                         headers: { "Content-Type": "application/json", ...corsHeaders },
                     });
                 }
-                // 普通用户限流(仅统计端点)
+                // 管理接口强制校验 admin 角色
+                if (ADMIN_ROUTES.includes(path) && currentUser.role !== "admin") {
+                    return new Response(JSON.stringify({ error: "Forbidden: admin only" }), {
+                        status: 403,
+                        headers: { "Content-Type": "application/json", ...corsHeaders },
+                    });
+                }
+                // 普通用户限流(仅统计端点): 原子占用配额, 业务失败再回滚
                 if (currentUser.level !== "vip" && statsEndpoints.includes(path)) {
-                    const used = await getUsageToday(env.DB, currentUser.id);
-                    if (used >= currentUser.daily_limit) {
+                    const ok = await reserveUsage(env.DB, currentUser.id, currentUser.daily_limit);
+                    if (!ok) {
                         return new Response(JSON.stringify({
                             error: "Daily limit reached",
                             limit: currentUser.daily_limit,
-                            used,
                         }), {
                             status: 429,
                             headers: { "Content-Type": "application/json", ...corsHeaders },
                         });
                     }
-                    await incrUsage(env.DB, currentUser.id);
+                    usageReserved = true;
                 }
             }
 
@@ -527,7 +549,21 @@ export default {
                 }
             }
 
-            return handler.onRequest({ request, env, ctx, user: currentUser });
+            let resp;
+            try {
+                resp = await handler.onRequest({ request, env, ctx, user: currentUser });
+            } catch (e) {
+                // 业务抛异常: 回滚已占用配额再抛出
+                if (usageReserved) {
+                    try { await releaseUsage(env.DB, currentUser.id); } catch (_) {}
+                }
+                throw e;
+            }
+            // 业务返回 >=400 视为失败, 回滚配额(参数错/鉴权错/上游错都不计入)
+            if (usageReserved && resp.status >= 400) {
+                try { await releaseUsage(env.DB, currentUser.id); } catch (e) { console.error("释放用量失败:", e); }
+            }
+            return resp;
         }
 
         // 404
