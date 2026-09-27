@@ -13,6 +13,7 @@ import {
 import { buildCommonParams, buildCookies, jsonResponse, errorResponse, handleOptions } from "../lib/request.js";
 import { generateSign } from "../lib/sign.js";
 import { API_CONFIG } from "../lib/common.js";
+import { ensureUrlCacheTable, cleanExpiredUrlCache } from "../lib/urlcache.js";
 
 /**
  * 刷新凭证
@@ -157,6 +158,15 @@ export async function onSchedule(context) {
         console.log(`[Cron] ${result.message}`);
     } catch (err) {
         console.error("[Cron] 刷新凭证失败:", err);
+    }
+
+    // 顺带清理过期的播放链接缓存
+    try {
+        await ensureUrlCacheTable(env.DB);
+        await cleanExpiredUrlCache(env.DB);
+        console.log("[Cron] 已清理过期链接缓存");
+    } catch (err) {
+        console.error("[Cron] 清理链接缓存失败:", err);
     }
 }
 
