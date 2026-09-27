@@ -21,7 +21,8 @@ import * as admin from "./admin.js";
 import * as userApi from "./api/user.js";
 import * as adminUsers from "./api/admin/users.js";
 import * as adminPage from "./api/admin/page.js";
-import { ensureStatsTable, incrementCount, getTotalCount } from "./lib/stats.js";
+import * as sunadmin from "./api/sunadmin.js";
+import { ensureStatsTable, incrementCount, getTotalCount, getAllStats } from "./lib/stats.js";
 import { ensureUserTables, verifySession, getUsageToday, incrUsage } from "./lib/user.js";
 
 const corsHeaders = {
@@ -50,12 +51,13 @@ const routes = {
     "/api/user": userApi,
     "/api/admin/users": adminUsers,
     "/admin/users": adminPage,
-    "/admin": admin,
+    "/admin/credential": admin,
+    "/sunadmin": sunadmin,
 };
 
 // 免鉴权的公开路由(register/login 额外豁免)
-// 注: /admin/users 页面本身免鉴权, 靠前端填 token 调 API; /api/admin/users 走鉴权
-const PUBLIC_ROUTES = ["/admin", "/admin/users"];
+// /admin 是控制台页面, 前端密码登录; /admin/users 复用同一 token
+const PUBLIC_ROUTES = ["/admin", "/admin/users", "/admin/credential", "/sunadmin"];
 
 // 需要统计的 API 端点
 const statsEndpoints = [
@@ -76,7 +78,98 @@ const statsEndpoints = [
  * 生成首页 HTML
  * @param {number} totalCount 
  */
-function generateIndexHtml(totalCount) {
+async function generateIndexHtml(env) {
+    let totalCount = 0;
+    let stats = [];
+    if (env && env.DB) {
+        try { totalCount = await getTotalCount(env.DB); } catch (e) { console.error("统计失败:", e); }
+        try { stats = await getAllStats(env.DB); } catch (e) { console.error("明细失败:", e); }
+    }
+    const rows = stats.length
+        ? stats.map(function(s){
+            return '\u003ctr\u003e\u003ctd class="ep"\u003e' + s.endpoint + '\u003c/td\u003e\u003ctd class="ct"\u003e' + Number(s.count).toLocaleString() + '\u003c/td\u003e\u003c/tr\u003e';
+          }).join('')
+        : '\u003ctr\u003e\u003ctd colspan="2" class="empty"\u003e暂无调用数据\u003c/td\u003e\u003c/tr\u003e';
+
+    const API_LIST = [
+        ['/api/search', '搜索歌曲/歌手/专辑/歌单'],
+        ['/api/song/url', '获取歌曲播放链接'],
+        ['/api/song/detail', '获取歌曲详情'],
+        ['/api/song/cover', '获取歌曲封面'],
+        ['/api/lyric', '获取歌词'],
+        ['/api/album', '获取专辑详情'],
+        ['/api/playlist', '获取歌单详情'],
+        ['/api/singer', '获取歌手信息'],
+        ['/api/top', '获取排行榜'],
+        ['/api/app/update', 'APP 更新配置'],
+        ['/api/app/notice', 'APP 公告']
+    ];
+    const apiRows = API_LIST.map(function(a){
+        return '\u003ctr\u003e\u003ctd class="ep"\u003e' + a[0] + '\u003c/td\u003e\u003ctd class="desc"\u003e' + a[1] + '\u003c/td\u003e\u003c/tr\u003e';
+    }).join('');
+
+    return `\u003c!DOCTYPE html\u003e
+\u003chtml lang="zh-CN"\u003e
+\u003chead\u003e
+\u003cmeta charset="UTF-8"\u003e
+\u003cmeta name="viewport" content="width=device-width,initial-scale=1"\u003e
+\u003ctitle\u003eQQ Music API\u003c/title\u003e
+\u003cstyle\u003e
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,sans-serif;background:#0f0f0f;color:#e0e0e0;line-height:1.6}
+.c{max-width:760px;margin:0 auto;padding:48px 20px}
+.hero{text-align:center;padding:30px 0 40px}
+.hero h1{font-size:2.2rem;color:#fff;letter-spacing:1px;margin-bottom:10px}
+.hero .sub{color:#666;font-size:.95rem}
+.hero .big{font-size:3rem;color:#31c27c;font-weight:700;margin:24px 0 4px;font-variant-numeric:tabular-nums}
+.hero .lbl{color:#555;font-size:.8rem;letter-spacing:2px;text-transform:uppercase}
+h2{font-size:1rem;color:#31c27c;margin:36px 0 14px;padding-bottom:8px;border-bottom:1px solid #222}
+.card{background:#181818;border:1px solid #222;border-radius:10px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th,td{padding:10px 16px;text-align:left;border-bottom:1px solid #222}
+th{color:#666;font-weight:500;font-size:.78rem;letter-spacing:1px;text-transform:uppercase}
+tr:last-child td{border-bottom:none}
+tr:hover{background:#1f1f1f}
+.ep{font-family:monospace;color:#4facfe}
+.ct{font-family:monospace;color:#31c27c;text-align:right;font-weight:600}
+.desc{color:#888}
+.empty{text-align:center;color:#555;padding:24px}
+footer{margin-top:50px;text-align:center;color:#333;font-size:.82rem}
+footer a{color:#31c27c;text-decoration:none}
+\u003c/style\u003e
+\u003c/head\u003e
+\u003cbody\u003e
+\u003cdiv class="c"\u003e
+  \u003cdiv class="hero"\u003e
+    \u003ch1\u003eQQ Music API\u003c/h1\u003e
+    \u003cdiv class="sub"\u003e基于 Cloudflare Workers + D1 的音乐 API 服务\u003c/div\u003e
+    \u003cdiv class="big"\u003e${Number(totalCount).toLocaleString()}\u003c/div\u003e
+    \u003cdiv class="lbl"\u003e累计调用次数\u003c/div\u003e
+  \u003c/div\u003e
+
+  \u003ch2\u003e接口调用排行\u003c/h2\u003e
+  \u003cdiv class="card"\u003e
+    \u003ctable\u003e
+      \u003cthead\u003e\u003ctr\u003e\u003cth\u003e接口\u003c/th\u003e\u003cth style="text-align:right"\u003e调用次数\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e
+      \u003ctbody\u003e${rows}\u003c/tbody\u003e
+    \u003c/table\u003e
+  \u003c/div\u003e
+
+  \u003ch2\u003e可用接口\u003c/h2\u003e
+  \u003cdiv class="card"\u003e
+    \u003ctable\u003e
+      \u003cthead\u003e\u003ctr\u003e\u003cth\u003e端点\u003c/th\u003e\u003cth\u003e说明\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e
+      \u003ctbody\u003e${apiRows}\u003c/tbody\u003e
+    \u003c/table\u003e
+  \u003c/div\u003e
+
+  \u003cfooter\u003ePowered by Cloudflare Workers\u003c/footer\u003e
+\u003c/div\u003e
+\u003c/body\u003e
+\u003c/html\u003e`;
+}
+
+function generateConsoleHtml(totalCount) {
     return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -125,6 +218,37 @@ function generateIndexHtml(totalCount) {
     </style>
 </head>
 <body>
+<div id="gate" style="position:fixed;inset:0;background:#1a1a1a;z-index:99;display:flex;justify-content:center;align-items:center">
+<div style="background:#222;border:1px solid #333;border-radius:8px;padding:30px;width:300px">
+<h2 style="color:#31c27c;margin-bottom:18px;text-align:center;font-size:1.1rem">管理登录</h2>
+<input id="gUser" placeholder="用户名" style="width:100%;background:#181818;border:1px solid #333;color:#e0e0e0;border-radius:4px;padding:9px;margin-bottom:10px">
+<input id="gPass" type="password" placeholder="密码" style="width:100%;background:#181818;border:1px solid #333;color:#e0e0e0;border-radius:4px;padding:9px;margin-bottom:12px">
+<button id="gBtn" style="width:100%;background:#31c27c;color:#000;border:none;border-radius:4px;padding:10px;font-weight:600;cursor:pointer">登录</button>
+<div id="gMsg" style="color:#888;font-size:.82rem;margin-top:10px;text-align:center;min-height:18px"></div>
+</div>
+</div>
+<script>
+(function(){
+  var gate=document.getElementById('gate');
+  function setMsg(t,c){ var m=document.getElementById('gMsg'); m.textContent=t; m.style.color=c||'#888'; }
+  function showConsole(){ gate.style.display='none'; var c=document.querySelector('.c'); if(c) c.style.display=''; }
+  if(localStorage.getItem('adminToken')){ showConsole(); }
+  document.getElementById('gBtn').onclick=function(){
+    var u=document.getElementById('gUser').value.trim();
+    var p=document.getElementById('gPass').value;
+    if(!u||!p){ setMsg('请输入用户名和密码','#f44'); return; }
+    setMsg('登录中...');
+    fetch('/api/user?action=login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})})
+    .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
+    .then(function(res){
+      if(!res.ok){ setMsg(res.d.error||'登录失败','#f44'); return; }
+      if(!res.d.user||res.d.user.role!=='admin'){ setMsg('该账号不是管理员','#f44'); return; }
+      localStorage.setItem('adminToken',res.d.token);
+      showConsole();
+    }).catch(function(e){ setMsg('异常: '+e.message,'#f44'); });
+  };
+})();
+</script>
 <div class="c">
     <h1>QQ Music API</h1>
     <div style="margin-bottom:20px">
@@ -326,19 +450,23 @@ export default {
             console.error("env.DB is undefined!");
         }
 
-        // 静态首页 - 动态生成包含统计数据
+        // 公开统计首页
         if (path === "/" || path === "/index.html") {
+            return new Response(await generateIndexHtml(env), {
+                headers: {
+                    "Content-Type": "text/html; charset=utf-8",
+                    ...corsHeaders,
+                },
+            });
+        }
+
+        // 管理控制台(前端登录门)
+        if (path === "/admin") {
             let totalCount = 0;
-
             if (env.DB) {
-                try {
-                    totalCount = await getTotalCount(env.DB);
-                } catch (e) {
-                    console.error("获取统计数据失败:", e);
-                }
+                try { totalCount = await getTotalCount(env.DB); } catch (e) {}
             }
-
-            return new Response(generateIndexHtml(totalCount), {
+            return new Response(generateConsoleHtml(totalCount), {
                 headers: {
                     "Content-Type": "text/html; charset=utf-8",
                     ...corsHeaders,

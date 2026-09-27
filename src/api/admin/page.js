@@ -235,6 +235,8 @@ maskEl.onclick = function(e){ if(e.target === maskEl) closeEdit(); };
 searchEl.addEventListener('input', function(){ if(tblEl.style.display !== 'none') loadUsers(); });
 
 tokenEl.value = localStorage.getItem('adminToken') || '';
+if(tokenEl.value.trim()){ PAGE = 1; loadUsers(); }
+else { setStatus('未登录, 请先到 /admin 登录', true); }
 tokenEl.addEventListener('change', function(){ localStorage.setItem('adminToken', tokenEl.value.trim()); });
 </script>
 </body>
