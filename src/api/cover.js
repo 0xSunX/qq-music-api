@@ -4,27 +4,9 @@
  */
 
 import { apiRequest, jsonResponse, errorResponse, handleOptions } from "../lib/request.js";
-import { ensureCredentialTable, getCredentialFromDB, parseCredential, saveCredentialToDB } from "../lib/credential.js";
+import { getCredential } from "../lib/credential.js";
 
 const DEFAULT_COVER = "https://y.gtimg.cn/music/photo_new/T002R800x800M000003y8dsH2wBHlo_1.jpg";
-
-/**
- * 获取凭证
- */
-async function getCredential(env) {
-    await ensureCredentialTable(env.DB);
-    let credential = await getCredentialFromDB(env.DB);
-
-    if (!credential && env.INITIAL_CREDENTIAL) {
-        const initial = parseCredential(env.INITIAL_CREDENTIAL);
-        if (initial) {
-            await saveCredentialToDB(env.DB, initial);
-            credential = initial;
-        }
-    }
-
-    return credential;
-}
 
 /**
  * 通过 album_mid 生成封面 URL

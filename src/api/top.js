@@ -7,21 +7,7 @@
 import { jsonResponse, errorResponse, handleOptions, buildCommonParams } from "../lib/request.js";
 import { generateSign } from "../lib/sign.js";
 import { API_CONFIG } from "../lib/common.js";
-import { ensureCredentialTable, getCredentialFromDB, parseCredential, saveCredentialToDB } from "../lib/credential.js";
-
-async function getCredential(env) {
-    if (!env.DB) return null;
-    await ensureCredentialTable(env.DB);
-    let credential = await getCredentialFromDB(env.DB);
-    if (!credential && env.INITIAL_CREDENTIAL) {
-        const initial = parseCredential(env.INITIAL_CREDENTIAL);
-        if (initial) {
-            await saveCredentialToDB(env.DB, initial);
-            credential = initial;
-        }
-    }
-    return credential;
-}
+import { getCredential } from "../lib/credential.js";
 
 export async function onRequest(context) {
     const { request, env } = context;

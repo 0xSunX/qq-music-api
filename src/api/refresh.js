@@ -7,7 +7,8 @@
 import {
     ensureCredentialTable,
     getCredentialFromDB,
-    saveCredentialToDB
+    saveCredentialToDB,
+    syncCredentialFromEnv
 } from "../lib/credential.js";
 import { buildCommonParams, buildCookies, jsonResponse, errorResponse, handleOptions } from "../lib/request.js";
 import { generateSign } from "../lib/sign.js";
@@ -94,12 +95,25 @@ async function refreshCredential(credential) {
  * @param {boolean} force 强制刷新
  * @returns {Promise<object>}
  */
-async function doRefresh(db, force = false) {
+async function doRefresh(db, force = false, envCredential = null) {
     await ensureCredentialTable(db);
+
+    // 先尝试用环境变量同步:musickey 变了就覆盖库中旧凭证
+    // 这样在 dashboard 改了 INITIAL_CREDENTIAL 后 refresh 也能拿到新凭证
+    if (envCredential) {
+        try {
+            const sync = await syncCredentialFromEnv(db, envCredential);
+            if (sync.synced) {
+                console.log(`[Refresh] ${sync.reason}`);
+            }
+        } catch (e) {
+            console.warn("[Refresh] 环境变量同步失败:", e.message);
+        }
+    }
 
     const credential = await getCredentialFromDB(db);
     if (!credential) {
-        return { success: false, message: "未找到凭证" };
+        return { success: false, message: "未找到凭证,请设置 INITIAL_CREDENTIAL 或通过 /admin 写入" };
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -110,8 +124,9 @@ async function doRefresh(db, force = false) {
 
     console.log(`[Refresh] 凭证剩余有效期: ${Math.floor(remainingTime / 3600)} 小时`);
 
-    // 如果剩余时间少于 48 小时或强制刷新（配合每天一次的 Cron 任务）
-    if (remainingTime < 48 * 3600 || force) {
+    // 相对阈值:剩余不足有效期 1/3 时刷新,避免写死 48h 撞上短有效期凭证
+    const refreshThreshold = Math.floor(expiresIn / 3);
+    if (remainingTime < refreshThreshold || force) {
         console.log("[Refresh] 开始刷新凭证...");
 
         const newData = await refreshCredential(credential);
@@ -144,7 +159,7 @@ export async function onSchedule(context) {
 
     try {
         console.log("[Cron] 开始检查凭证状态...");
-        const result = await doRefresh(env.DB, false);
+        const result = await doRefresh(env.DB, false, env.INITIAL_CREDENTIAL);
         console.log(`[Cron] ${result.message}`);
     } catch (err) {
         console.error("[Cron] 刷新凭证失败:", err);
@@ -170,7 +185,7 @@ export async function onRequest(context) {
         const url = new URL(request.url);
         const force = url.searchParams.get("force") === "true";
 
-        const result = await doRefresh(env.DB, force);
+        const result = await doRefresh(env.DB, force, env.INITIAL_CREDENTIAL);
         return jsonResponse(result);
     } catch (err) {
         console.error("刷新凭证失败:", err);
