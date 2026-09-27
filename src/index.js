@@ -166,7 +166,7 @@ footer a{color:#31c27c;text-decoration:none}
     \u003c/table\u003e
   \u003c/div\u003e
 
-  \u003cfooter\u003ePowered by Cloudflare Workers\u003c/footer\u003e
+  \u003cfooter\u003ePowered by Cloudflare Workers · © iSun\u003c/footer\u003e
 \u003c/div\u003e
 \u003c/body\u003e
 \u003c/html\u003e`;
@@ -187,6 +187,7 @@ function generateConsoleHtml(totalCount) {
         .s{color:#666;margin-bottom:40px}
         .s .count{color:#31c27c;font-weight:600}
         h2{font-size:1.1rem;color:#31c27c;margin:30px 0 15px;border-bottom:1px solid #333;padding-bottom:8px}
+        h3{font-size:.95rem;color:#4facfe;margin:22px 0 10px}
         .e{background:#222;border-radius:8px;padding:16px;margin-bottom:16px}
         .h{display:flex;align-items:center;gap:10px;margin-bottom:10px}
         .m{background:#31c27c;color:#000;padding:2px 8px;border-radius:4px;font-size:.75rem;font-weight:600}
@@ -236,6 +237,15 @@ function generateConsoleHtml(totalCount) {
   function setMsg(t,c){ var m=document.getElementById('gMsg'); m.textContent=t; m.style.color=c||'#888'; }
   function showConsole(){ gate.style.display='none'; var c=document.querySelector('.c'); if(c) c.style.display=''; }
   if(localStorage.getItem('adminToken')){ showConsole(); }
+  var lo=document.getElementById('adminLogout');
+  if(lo){ lo.onclick=function(){
+    var tk=localStorage.getItem('adminToken');
+    if(tk){ fetch('/api/user?action=logout',{method:'POST',headers:{'Authorization':'Bearer '+tk}}).catch(function(){}); }
+    localStorage.removeItem('adminToken');
+    location.reload();
+  }; }
+  var bt=document.getElementById('backTop');
+  if(bt){ bt.onclick=function(){ window.scrollTo({top:0,behavior:'smooth'}); }; }
   document.getElementById('gBtn').onclick=function(){
     var u=document.getElementById('gUser').value.trim();
     var p=document.getElementById('gPass').value;
@@ -254,8 +264,11 @@ function generateConsoleHtml(totalCount) {
 </script>
 <div class="c">
     <h1>QQ Music API</h1>
-    <div style="margin-bottom:20px">
+    <div style="margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap">
         <a href="/admin/users" style="display:inline-block;background:#31c27c;color:#000;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none">👥 用户管理</a>
+        <a href="/" style="display:inline-block;background:#2a2a2a;border:1px solid #444;color:#e0e0e0;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none">🏠 网站首页</a>
+        <button id="adminLogout" style="background:#2a2a2a;border:1px solid #444;color:#e0e0e0;font-weight:600;padding:10px 20px;border-radius:6px;cursor:pointer">🚪 退出登录</button>
+        <button id="backTop" style="background:#2a2a2a;border:1px solid #444;color:#e0e0e0;font-weight:600;padding:10px 20px;border-radius:6px;cursor:pointer">⬆️ 回到顶部</button>
     </div>
     <div class="e" id="api-tester">
         <div class="h"><span class="m">调试</span><span class="p">API Tester</span></div>
@@ -271,6 +284,7 @@ function generateConsoleHtml(totalCount) {
             <button id="at-reset">重置参数</button>
             <button id="at-copy-url">复制 URL</button>
             <button id="at-copy-resp">复制结果</button>
+            <button id="at-goto">定位说明</button>
         </div>
         <button id="at-send" class="at-btn">发送请求</button>
         <div class="at-status" id="at-status">就绪</div>
@@ -278,62 +292,78 @@ function generateConsoleHtml(totalCount) {
     </div>
     <p class="s">基于 Cloudflare Workers + D1 的 QQ 音乐 API 服务 · 累计调用 <span class="count">${totalCount.toLocaleString()}</span> 次</p>
     
-    <h2>搜索</h2>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/search</span></div><p class="d">搜索歌曲、歌手、专辑或歌单</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">keyword</span><span class="r">*</span></td><td>string</td><td>搜索关键词</td></tr><tr><td><span class="pm">type</span></td><td>string</td><td>song/singer/album/playlist</td></tr><tr><td><span class="pm">num</span></td><td>int</td><td>返回数量</td></tr><tr><td><span class="pm">page</span></td><td>int</td><td>页码</td></tr></table><div class="ex">GET /api/search?keyword=周杰伦&type=song&num=20</div></div>
-    <h2>歌曲</h2>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/song/url</span></div><p class="d">获取歌曲播放链接</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">mid</span><span class="r">*</span></td><td>string</td><td>歌曲MID，多个用逗号分隔</td></tr><tr><td><span class="pm">quality</span></td><td>string</td><td>master/atmos/atmos_51/flac/320/128</td></tr></table><div class="ex">GET /api/song/url?mid=0039MnYb0qxYhV&quality=320</div></div>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/song/detail</span></div><p class="d">获取歌曲详情</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">mid</span></td><td>string</td><td>歌曲MID</td></tr><tr><td><span class="pm">id</span></td><td>int</td><td>歌曲ID</td></tr></table><div class="ex">GET /api/song/detail?mid=0039MnYb0qxYhV</div></div>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/song/cover</span></div><p class="d">获取歌曲封面（支持 mid 自动处理、album_mid 回退）</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">mid</span></td><td>string</td><td>歌曲MID（自动获取详情）</td></tr><tr><td><span class="pm">album_mid</span></td><td>string</td><td>专辑MID</td></tr><tr><td><span class="pm">size</span></td><td>int</td><td>150/300/500/800</td></tr><tr><td><span class="pm">validate</span></td><td>bool</td><td>是否验证(默认true)</td></tr></table><div class="ex">GET /api/song/cover?mid=0039MnYb0qxYhV&size=300</div></div>
-    <h2>歌词</h2>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/lyric</span></div><p class="d">获取歌词 (支持 LRC/QRC/罗马音/翻译 解密)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">mid</span></td><td>string</td><td>歌曲MID</td></tr><tr><td><span class="pm">id</span></td><td>int</td><td>歌曲ID</td></tr><tr><td><span class="pm">qrc</span></td><td>bool</td><td>是否获取逐字歌词 (开启后 lyric 字段返回 QRC XML)</td></tr><tr><td><span class="pm">trans</span></td><td>bool</td><td>是否获取翻译歌词 (trans 字段)</td></tr><tr><td><span class="pm">roma</span></td><td>bool</td><td>是否获取罗马音歌词 (roma 字段, XML 格式)</td></tr></table><div class="ex">GET /api/lyric?mid=0039MnYb0qxYhV&qrc=1&trans=1&roma=1</div></div>
-    <h2>专辑/歌单/歌手</h2>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/album</span></div><p class="d">获取专辑详情</p><div class="ex">GET /api/album?mid=002fRO0N4FftzY</div></div>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/playlist</span></div><p class="d">获取歌单详情</p><div class="ex">GET /api/playlist?id=8052190267</div></div>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/singer</span></div><p class="d">获取歌手信息</p><div class="ex">GET /api/singer?mid=0025NhlN2yWrP4</div></div>
-    <h2>排行榜</h2>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/top</span></div><p class="d">获取排行榜列表或详情</p><div class="ex">GET /api/top</div><div class="ex">GET /api/top?id=4&num=50</div></div>
-    <h2>APP 配置</h2>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/app/update</span></div><p class="d">获取 APP 更新配置(版本比对与强制更新判断)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">platform</span><span class="r">*</span></td><td>string</td><td>android / ios</td></tr><tr><td><span class="pm">version</span></td><td>string</td><td>客户端当前版本,如 1.2.0</td></tr><tr><td><span class="pm">build</span></td><td>int</td><td>构建号,用于强制更新判断</td></tr><tr><td><span class="pm">channel</span></td><td>string</td><td>渠道,默认 official</td></tr></table><div class="ex">GET /api/app/update?platform=android&version=1.0.0&build=80</div><p class="d">返回 hasUpdate / forceUpdate / latestVersion / changelog / downloadUrl / fileHash 等字段</p></div>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/app/notice</span></div><p class="d">获取 APP 公告(支持平台/版本/渠道过滤与定时上下线)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">platform</span></td><td>string</td><td>android / ios,不传返回全平台</td></tr><tr><td><span class="pm">version</span></td><td>string</td><td>客户端版本,用于版本限定公告</td></tr><tr><td><span class="pm">channel</span></td><td>string</td><td>渠道,默认 official</td></tr></table><div class="ex">GET /api/app/notice?platform=android&version=1.2.0</div><p class="d">返回 notices 数组(type/level/title/content/actionUrl/forceShow)及 serverTime</p></div>
-    <h2>用户系统</h2>
-    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=register</span></div><p class="d">注册账号(同一设备仅能注册一个)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">username</span><span class="r">*</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span><span class="r">*</span></td><td>string</td><td>至少 6 位</td></tr><tr><td><span class="pm">deviceId</span><span class="r">*</span></td><td>string</td><td>设备指纹</td></tr></table><div class="ex">POST /api/user?action=register{ "username":"test", "password":"123456", "deviceId":"abc123" }</div><p class="d">注册用户均为普通用户, 管理员需通过 /api/setup 初始化创建</p></div>
-    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=login</span></div><p class="d">登录, 返回 token 用于后续接口鉴权</p><div class="ex">POST /api/user?action=login{ "username":"test", "password":"123456" }</div><p class="d">返回 token, 后续请求头带: Authorization: Bearer 你的token</p></div>
-    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=logout</span></div><p class="d">登出, 注销当前 token</p></div>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/user?action=me</span></div><p class="d">查询当前用户信息与今日用量(需 token)</p><div class="ex">GET /api/user?action=meAuthorization: Bearer 你的token</div></div>
+    <h2>音乐业务接口</h2>
+    <h3>搜索</h3>
+    <div class="e" id="doc-search"><div class="h"><span class="m">GET</span><span class="p">/api/search</span></div><p class="d">搜索歌曲、歌手、专辑或歌单</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">keyword</span><span class="r">*</span></td><td>string</td><td>搜索关键词</td></tr><tr><td><span class="pm">type</span></td><td>string</td><td>song/singer/album/playlist</td></tr><tr><td><span class="pm">num</span></td><td>int</td><td>返回数量</td></tr><tr><td><span class="pm">page</span></td><td>int</td><td>页码</td></tr></table><div class="ex">GET /api/search?keyword=周杰伦&type=song&num=20</div><p class="d">返回: code / data{keyword,type,page,num,total,list[]}</p></div>
+    <h3>歌曲</h3>
+    <div class="e" id="doc-songurl"><div class="h"><span class="m">GET</span><span class="p">/api/song/url</span></div><p class="d">获取歌曲播放链接</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">mid</span><span class="r">*</span></td><td>string</td><td>歌曲MID，多个用逗号分隔</td></tr><tr><td><span class="pm">quality</span></td><td>string</td><td>master/atmos/atmos_51/flac/320/128</td></tr></table><div class="ex">GET /api/song/url?mid=0039MnYb0qxYhV&quality=320</div><p class="d">返回: code / data{歌曲mid:播放url} / quality(实际命中音质)</p></div>
+    <div class="e" id="doc-songdetail"><div class="h"><span class="m">GET</span><span class="p">/api/song/detail</span></div><p class="d">获取歌曲详情</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">mid</span></td><td>string</td><td>歌曲MID</td></tr><tr><td><span class="pm">id</span></td><td>int</td><td>歌曲ID</td></tr></table><div class="ex">GET /api/song/detail?mid=0039MnYb0qxYhV</div><p class="d">返回: code / data(歌曲详情对象)</p></div>
+    <div class="e" id="doc-songcover"><div class="h"><span class="m">GET</span><span class="p">/api/song/cover</span></div><p class="d">获取歌曲封面（支持 mid 自动处理、album_mid 回退）</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">mid</span></td><td>string</td><td>歌曲MID（自动获取详情）</td></tr><tr><td><span class="pm">album_mid</span></td><td>string</td><td>专辑MID</td></tr><tr><td><span class="pm">size</span></td><td>int</td><td>150/300/500/800</td></tr><tr><td><span class="pm">validate</span></td><td>bool</td><td>是否验证(默认true)</td></tr></table><div class="ex">GET /api/song/cover?mid=0039MnYb0qxYhV&size=300</div><p class="d">返回: code / data{url,source,size,vs?}</p></div>
+    <h3>歌词</h3>
+    <div class="e" id="doc-lyric"><div class="h"><span class="m">GET</span><span class="p">/api/lyric</span></div><p class="d">获取歌词 (支持 LRC/QRC/罗马音/翻译 解密)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">mid</span></td><td>string</td><td>歌曲MID</td></tr><tr><td><span class="pm">id</span></td><td>int</td><td>歌曲ID</td></tr><tr><td><span class="pm">qrc</span></td><td>bool</td><td>是否获取逐字歌词 (开启后 lyric 字段返回 QRC XML)</td></tr><tr><td><span class="pm">trans</span></td><td>bool</td><td>是否获取翻译歌词 (trans 字段)</td></tr><tr><td><span class="pm">roma</span></td><td>bool</td><td>是否获取罗马音歌词 (roma 字段, XML 格式)</td></tr></table><div class="ex">GET /api/lyric?mid=0039MnYb0qxYhV&qrc=1&trans=1&roma=1</div><p class="d">返回: code / data{mid,id,lyric,trans,roma,qrc?}</p></div>
+    <h3>专辑 / 歌单 / 歌手</h3>
+    <div class="e" id="doc-album"><div class="h"><span class="m">GET</span><span class="p">/api/album</span></div><p class="d">获取专辑详情</p><div class="ex">GET /api/album?mid=002fRO0N4FftzY</div><p class="d">返回: code / data(专辑详情对象)</p></div>
+    <div class="e" id="doc-playlist"><div class="h"><span class="m">GET</span><span class="p">/api/playlist</span></div><p class="d">获取歌单详情</p><div class="ex">GET /api/playlist?id=8052190267</div><p class="d">返回: code / data(歌单详情对象)</p></div>
+    <div class="e" id="doc-singer"><div class="h"><span class="m">GET</span><span class="p">/api/singer</span></div><p class="d">获取歌手信息</p><div class="ex">GET /api/singer?mid=0025NhlN2yWrP4</div><p class="d">返回: code / data(歌手信息对象)</p></div>
+    <h3>排行榜</h3>
+    <div class="e" id="doc-top"><div class="h"><span class="m">GET</span><span class="p">/api/top</span></div><p class="d">获取排行榜列表或详情</p><div class="ex">GET /api/top</div><div class="ex">GET /api/top?id=4&num=50</div><p class="d">返回: code / data(榜单列表或详情对象)</p></div>
+    <h2>APP 配置接口</h2>
+    <div class="e" id="doc-appupdate"><div class="h"><span class="m">GET</span><span class="p">/api/app/update</span></div><p class="d">获取 APP 更新配置(版本比对与强制更新判断)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">platform</span><span class="r">*</span></td><td>string</td><td>android / ios</td></tr><tr><td><span class="pm">version</span></td><td>string</td><td>客户端当前版本,如 1.2.0</td></tr><tr><td><span class="pm">build</span></td><td>int</td><td>构建号,用于强制更新判断</td></tr><tr><td><span class="pm">channel</span></td><td>string</td><td>渠道,默认 official</td></tr></table><div class="ex">GET /api/app/update?platform=android&version=1.0.0&build=80</div><p class="d">返回 hasUpdate / forceUpdate / latestVersion / changelog / downloadUrl / fileHash 等字段</p></div>
+    <div class="e" id="doc-appnotice"><div class="h"><span class="m">GET</span><span class="p">/api/app/notice</span></div><p class="d">获取 APP 公告(支持平台/版本/渠道过滤与定时上下线)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">platform</span></td><td>string</td><td>android / ios,不传返回全平台</td></tr><tr><td><span class="pm">version</span></td><td>string</td><td>客户端版本,用于版本限定公告</td></tr><tr><td><span class="pm">channel</span></td><td>string</td><td>渠道,默认 official</td></tr></table><div class="ex">GET /api/app/notice?platform=android&version=1.2.0</div><p class="d">返回 notices 数组(type/level/title/content/actionUrl/forceShow)及 serverTime</p></div>
+    <h2>用户系统接口</h2>
+    <div class="e" id="doc-register"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=register</span></div><p class="d">注册账号(同一设备仅能注册一个)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">username</span><span class="r">*</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span><span class="r">*</span></td><td>string</td><td>至少 6 位</td></tr><tr><td><span class="pm">deviceId</span><span class="r">*</span></td><td>string</td><td>设备指纹</td></tr></table><div class="ex">POST /api/user?action=register{ "username":"test", "password":"123456", "deviceId":"abc123" }</div><p class="d">注册用户均为普通用户, 管理员需通过 /api/setup 初始化创建</p></div>
+    <div class="e" id="doc-login"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=login</span></div><p class="d">登录, 返回 token 用于后续接口鉴权</p><div class="ex">POST /api/user?action=login{ "username":"test", "password":"123456" }</div><p class="d">返回 token, 后续请求头带: Authorization: Bearer 你的token</p></div>
+    <div class="e" id="doc-logout"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=logout</span></div><p class="d">登出, 注销当前 token</p></div>
+    <div class="e" id="doc-me"><div class="h"><span class="m">GET</span><span class="p">/api/user?action=me</span></div><p class="d">查询当前用户信息与今日用量(需 token)</p><div class="ex">GET /api/user?action=meAuthorization: Bearer 你的token</div></div>
     <h2>用户规则</h2>
     <div class="e"><table><tr><th>等级</th><th>调用限制</th><th>说明</th></tr><tr><td><span class="tag tag-normal" style="padding:2px 8px;border-radius:4px;background:#333;color:#aaa">普通用户</span></td><td>每日 50 次</td><td>超出返回 429</td></tr><tr><td><span class="tag tag-vip" style="padding:2px 8px;border-radius:4px;background:#f0a020;color:#000">VIP 用户</span></td><td>无限制</td><td>不限调用次数</td></tr></table><p class="d">鉴权规则: 公开端点仅 /api/user?action=register|login 与 /api/setup(站点初始化); 其余 /api/ 接口均需请求头 Authorization: Bearer 你的token; /api/admin/* 额外要求账号 role=admin。普通用户仅统计类接口计入日限额, VIP 不限。</p></div>
     <h2>管理接口</h2>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/admin/users?action=list</span></div><p class="d">用户列表(需 admin), 支持 page/size 分页</p><div class="ex">GET /api/admin/users?action=list&page=1&size=20Authorization: Bearer 管理员token</div></div>
-    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=level</span></div><p class="d">修改用户等级(normal/vip)</p><div class="ex">POST /api/admin/users?action=level{ "userId":2, "level":"vip" }</div></div>
-    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=status</span></div><p class="d">禁用/启用用户(status: 1启用 0禁用)</p><div class="ex">POST /api/admin/users?action=status{ "userId":2, "status":0 }</div></div>
-    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=delete</span></div><p class="d">删除用户(级联清理会话与用量)</p><div class="ex">POST /api/admin/users?action=delete{ "userId":2 }</div></div>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/admin/users?action=detail</span></div><p class="d">单个用户详情(含设备ID与时间戳, 需 admin)</p><div class="ex">GET /api/admin/users?action=detail&userId=2</div></div>
-    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=update</span></div><p class="d">部分更新用户(用户名/密码/日限额/等级/状态; 改密强制下线)</p><div class="ex">POST /api/admin/users?action=update{ "userId":2, "dailyLimit":100, "level":"vip" }</div></div>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/admin/credential</span></div><p class="d">查看凭证状态(脱敏, 只回 musicid/登录类型/有效期, 需 admin)</p><div class="ex">GET /api/admin/credential</div></div>
-    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/credential</span></div><p class="d">更新 QQ 音乐凭证(需 admin, body 或 body.credential)</p><div class="ex">POST /api/admin/credential{ "musicid":"xxx", "musickey":"xxx" }</div></div>
-    <div class="e"><div class="h"><span class="m">GET/POST</span><span class="p">/api/setup</span></div><p class="d">站点初始化: GET 查看状态, POST 清库并创建初始管理员(检测到已有 admin 即锁定)</p><div class="ex">POST /api/setup{ "username":"admin", "password":"******" }</div></div>
+    <h3>用户管理</h3>
+    <div class="e" id="doc-adminusers"><div class="h"><span class="m">GET</span><span class="p">/api/admin/users?action=list</span></div><p class="d">用户列表(需 admin)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 list</td></tr><tr><td><span class="pm">page</span></td><td>int</td><td>页码,默认 1</td></tr><tr><td><span class="pm">size</span></td><td>int</td><td>每页条数,默认 20,最大 100</td></tr></table><div class="ex">GET /api/admin/users?action=list&page=1&size=20Authorization: Bearer 管理员token</div><p class="d">返回: code / page / size / total / list[]</p></div>
+    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=level</span></div><p class="d">修改用户等级</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 level</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr><tr><td><span class="pm">level</span><span class="r">*</span></td><td>string</td><td>normal / vip</td></tr></table><div class="ex">POST /api/admin/users?action=level{ "userId":2, "level":"vip" }</div><p class="d">返回: code / message / userId / level</p></div>
+    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=status</span></div><p class="d">禁用/启用用户</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 status</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr><tr><td><span class="pm">status</span><span class="r">*</span></td><td>int</td><td>1启用 0禁用</td></tr></table><div class="ex">POST /api/admin/users?action=status{ "userId":2, "status":0 }</div><p class="d">返回: code / message</p></div>
+    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=delete</span></div><p class="d">删除用户(级联清理会话与用量)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 delete</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr></table><div class="ex">POST /api/admin/users?action=delete{ "userId":2 }</div><p class="d">返回: code / message / userId</p></div>
+    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/admin/users?action=detail</span></div><p class="d">单个用户详情(含设备ID与时间戳, 需 admin)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 detail</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr></table><div class="ex">GET /api/admin/users?action=detail&userId=2</div><p class="d">返回: code / user{id,username,level,role,status,dailyLimit,deviceId,createdAt,updatedAt}</p></div>
+    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=update</span></div><p class="d">部分更新用户(改密强制下线)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 update</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr><tr><td><span class="pm">username</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span></td><td>string</td><td>至少 6 位,改后强制下线</td></tr><tr><td><span class="pm">dailyLimit</span></td><td>int</td><td>1-100000</td></tr><tr><td><span class="pm">level</span></td><td>string</td><td>normal / vip</td></tr><tr><td><span class="pm">status</span></td><td>int</td><td>1启用 0禁用</td></tr></table><div class="ex">POST /api/admin/users?action=update{ "userId":2, "dailyLimit":100, "level":"vip" }</div><p class="d">返回: code / message / user(更新后完整信息)</p></div>
+    <h3>凭证管理</h3>
+    <div class="e" id="doc-admincred"><div class="h"><span class="m">GET</span><span class="p">/api/admin/credential</span></div><p class="d">查看凭证完整状态(需 admin, 不脱敏)</p><div class="ex">GET /api/admin/credential</div><p class="d">返回: credential(完整对象, 含 musickey / refresh_token / refresh_key / openid 等全部字段; 无凭证时 credential=null)</p></div>
+    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/credential</span></div><p class="d">更新 QQ 音乐凭证(需 admin)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">musicid</span><span class="r">*</span></td><td>string</td><td>音乐账号ID</td></tr><tr><td><span class="pm">musickey</span><span class="r">*</span></td><td>string</td><td>音乐密钥</td></tr><tr><td><span class="pm">credential</span></td><td>object</td><td>也可整体包在 credential 字段里</td></tr></table><div class="ex">POST /api/admin/credential{ "musicid":"xxx", "musickey":"xxx" }</div><p class="d">返回: success / message / musicid</p></div>
+    <h3>站点初始化</h3>
+    <div class="e" id="doc-setup"><div class="h"><span class="m">GET/POST</span><span class="p">/api/setup</span></div><p class="d">站点初始化: GET 查看状态, POST 清库并创建初始管理员(检测到已有 admin 即锁定, 管理员默认 vip 且日限额 100000)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">username</span><span class="r">*</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span><span class="r">*</span></td><td>string</td><td>至少 6 位</td></tr></table><div class="ex">POST /api/setup{ "username":"admin", "password":"******" }</div><p class="d">返回: code / message / adminId / username</p></div>
+    <h3>管理页面</h3>
     <div class="e"><div class="h"><span class="m">PAGE</span><span class="p">/admin/users</span></div><p class="d">图形化管理后台, 填入管理员 token 后可增删改查用户</p><div class="ex"><a href="/admin/users" style="color:#31c27c">打开用户管理后台 →</a></div></div>
-    <footer><a href="https://doc.ygking.top">文档</a> · <a href="https://github.com/tooplick/qq-music-api">GitHub</a></footer>
+    <footer><a href="https://isunc.com">文档</a> · <a href="https://github.com/0xSunX/qq-music-api">GitHub</a> · © iSun</footer>
 </div>
 <script>
 (function(){
   var APIS = [
-    {path:'/api/search',method:'GET',desc:'搜索歌曲/歌手/专辑/歌单',params:[{k:'keyword',v:'周杰伦',req:1},{k:'type',v:'song'},{k:'num',v:'10'},{k:'page',v:'1'}]},
-    {path:'/api/song/url',method:'GET',desc:'获取歌曲播放链接(多音质自动降级)',params:[{k:'mid',v:'0039MnYb0qxYhV',req:1},{k:'quality',v:'320'}]},
-    {path:'/api/song/detail',method:'GET',desc:'获取歌曲详情',params:[{k:'mid',v:'0039MnYb0qxYhV',req:1}]},
-    {path:'/api/song/cover',method:'GET',desc:'获取歌曲封面(支持 mid / album_mid / vs)',params:[{k:'mid',v:'0039MnYb0qxYhV'},{k:'size',v:'300'}]},
-    {path:'/api/lyric',method:'GET',desc:'获取歌词(LRC/QRC/翻译/罗马音)',params:[{k:'mid',v:'0039MnYb0qxYhV',req:1},{k:'qrc',v:'1'},{k:'trans',v:'1'},{k:'roma',v:'1'}]},
-    {path:'/api/album',method:'GET',desc:'获取专辑详情',params:[{k:'mid',v:'002fRO0N4FftzY',req:1}]},
-    {path:'/api/playlist',method:'GET',desc:'获取歌单详情',params:[{k:'id',v:'8052190267',req:1}]},
-    {path:'/api/singer',method:'GET',desc:'获取歌手信息',params:[{k:'mid',v:'0025NhlN2yWrP4',req:1}]},
-    {path:'/api/top',method:'GET',desc:'获取排行榜列表或详情',params:[{k:'id',v:'4'},{k:'num',v:'50'}]},
-    {path:'/api/app/update',method:'GET',desc:'APP 更新配置(版本比对/强制更新)',params:[{k:'platform',v:'android',req:1},{k:'version',v:'1.0.0'},{k:'build',v:'80'}]},
-    {path:'/api/app/notice',method:'GET',desc:'APP 公告(平台/版本/渠道过滤)',params:[{k:'platform',v:'android'},{k:'version',v:'1.2.0'}]},
-    {path:'/api/credential',method:'GET',desc:'读取当前凭证',params:[]},
-    {path:'/api/credential/refresh',method:'POST',desc:'手动刷新凭证(force=true 强制刷新)',params:[{k:'force',v:'true'}],body:'{}'},
-    {path:'/api/admin/users',method:'GET',desc:'用户列表/详情(需 admin, action=list|detail)',params:[{k:'action',v:'list'},{k:'page',v:'1'},{k:'size',v:'20'}]},
-    {path:'/api/admin/credential',method:'GET',desc:'查看凭证状态(脱敏, 需 admin)',params:[]},
-    {path:'/api/setup',method:'GET',desc:'站点初始化状态(公开)',params:[]}
+    {group:'音乐业务',docKey:'doc-search',tip:'搜索',path:'/api/search',method:'GET',desc:'搜索歌曲/歌手/专辑/歌单',params:[{k:'keyword',v:'周杰伦',req:1},{k:'type',v:'song'},{k:'num',v:'10'},{k:'page',v:'1'}]},
+    {group:'音乐业务',docKey:'doc-songurl',tip:'播放链接',path:'/api/song/url',method:'GET',desc:'获取歌曲播放链接(多音质自动降级)',params:[{k:'mid',v:'0039MnYb0qxYhV',req:1},{k:'quality',v:'320'}]},
+    {group:'音乐业务',docKey:'doc-songdetail',tip:'歌曲详情',path:'/api/song/detail',method:'GET',desc:'获取歌曲详情',params:[{k:'mid',v:'0039MnYb0qxYhV',req:1}]},
+    {group:'音乐业务',docKey:'doc-songcover',tip:'歌曲封面',path:'/api/song/cover',method:'GET',desc:'获取歌曲封面(支持 mid / album_mid / vs)',params:[{k:'mid',v:'0039MnYb0qxYhV'},{k:'size',v:'300'}]},
+    {group:'音乐业务',docKey:'doc-lyric',tip:'歌词',path:'/api/lyric',method:'GET',desc:'获取歌词(LRC/QRC/翻译/罗马音)',params:[{k:'mid',v:'0039MnYb0qxYhV',req:1},{k:'qrc',v:'1'},{k:'trans',v:'1'},{k:'roma',v:'1'}]},
+    {group:'音乐业务',docKey:'doc-album',tip:'专辑详情',path:'/api/album',method:'GET',desc:'获取专辑详情',params:[{k:'mid',v:'002fRO0N4FftzY',req:1}]},
+    {group:'音乐业务',docKey:'doc-playlist',tip:'歌单详情',path:'/api/playlist',method:'GET',desc:'获取歌单详情',params:[{k:'id',v:'8052190267',req:1}]},
+    {group:'音乐业务',docKey:'doc-singer',tip:'歌手信息',path:'/api/singer',method:'GET',desc:'获取歌手信息',params:[{k:'mid',v:'0025NhlN2yWrP4',req:1}]},
+    {group:'音乐业务',docKey:'doc-top',tip:'排行榜',path:'/api/top',method:'GET',desc:'获取排行榜列表或详情',params:[{k:'id',v:'4'},{k:'num',v:'50'}]},
+    {group:'APP 配置',docKey:'doc-appupdate',tip:'版本更新',path:'/api/app/update',method:'GET',desc:'APP 更新配置(版本比对/强制更新)',params:[{k:'platform',v:'android',req:1},{k:'version',v:'1.0.0'},{k:'build',v:'80'}]},
+    {group:'APP 配置',docKey:'doc-appnotice',tip:'公告',path:'/api/app/notice',method:'GET',desc:'APP 公告(平台/版本/渠道过滤)',params:[{k:'platform',v:'android'},{k:'version',v:'1.2.0'}]},
+    {group:'凭证',docKey:'doc-cred',tip:'读取凭证',path:'/api/credential',method:'GET',desc:'读取当前凭证',params:[]},
+    {group:'凭证',docKey:'doc-refresh',tip:'刷新凭证',path:'/api/credential/refresh',method:'POST',desc:'手动刷新凭证(force=true 强制刷新)',params:[{k:'force',v:'true'}],body:'{ "force": false }'},
+    {group:'管理',docKey:'doc-adminusers',tip:'用户列表/详情',path:'/api/admin/users',method:'GET',desc:'用户列表/详情(需 admin, action=list|detail)',params:[{k:'action',v:'list'},{k:'page',v:'1'},{k:'size',v:'20'}]},
+    {group:'管理',docKey:'doc-admincred',tip:'查看凭证状态',path:'/api/admin/credential',method:'GET',desc:'查看凭证完整状态(需 admin)',params:[]},
+    {group:'管理',docKey:'doc-setup',tip:'站点初始化',path:'/api/setup',method:'GET',desc:'站点初始化状态(公开)',params:[]},
+    {group:'用户系统',docKey:'doc-register',tip:'注册',path:'/api/user',method:'POST',desc:'注册账号(公开)',params:[{k:'action',v:'register'}],body:'{ "username":"test", "password":"123456", "deviceId":"abc123" }'},
+    {group:'用户系统',docKey:'doc-login',tip:'登录',path:'/api/user',method:'POST',desc:'登录(公开, 返回 token)',params:[{k:'action',v:'login'}],body:'{ "username":"test", "password":"123456" }'},
+    {group:'用户系统',docKey:'doc-logout',tip:'登出',path:'/api/user',method:'POST',desc:'登出(需 token)',params:[{k:'action',v:'logout'}],body:'{}'},
+    {group:'用户系统',docKey:'doc-me',tip:'我的信息',path:'/api/user',method:'GET',desc:'当前用户信息与今日用量(需 token)',params:[{k:'action',v:'me'}]},
+    {group:'管理',docKey:'doc-adminusers',tip:'改用户等级',path:'/api/admin/users',method:'POST',desc:'修改用户等级(需 admin)',params:[{k:'action',v:'level'}],body:'{ "userId":2, "level":"vip" }'},
+    {group:'管理',docKey:'doc-adminusers',tip:'禁用/启用用户',path:'/api/admin/users',method:'POST',desc:'禁用/启用用户(需 admin)',params:[{k:'action',v:'status'}],body:'{ "userId":2, "status":0 }'},
+    {group:'管理',docKey:'doc-adminusers',tip:'删除用户',path:'/api/admin/users',method:'POST',desc:'删除用户(需 admin)',params:[{k:'action',v:'delete'}],body:'{ "userId":2 }'},
+    {group:'管理',docKey:'doc-adminusers',tip:'更新用户',path:'/api/admin/users',method:'POST',desc:'部分更新用户(需 admin)',params:[{k:'action',v:'update'}],body:'{ "userId":2, "dailyLimit":100, "level":"vip" }'},
+    {group:'管理',docKey:'doc-adminusers',tip:'用户详情',path:'/api/admin/users',method:'GET',desc:'单用户详情(需 admin)',params:[{k:'action',v:'detail'},{k:'userId',v:'2'}]},
+    {group:'管理',docKey:'doc-admincred',tip:'更新凭证',path:'/api/admin/credential',method:'POST',desc:'更新音乐凭证(需 admin)',params:[],body:'{ "musicid":"xxx", "musickey":"xxx" }'},
+    {group:'管理',docKey:'doc-setup',tip:'初始化站点',path:'/api/setup',method:'POST',desc:'站点初始化(公开, 仅未初始化时可用)',params:[],body:'{ "username":"admin", "password":"******" }'}
   ];
   var NL = String.fromCharCode(10);
   var sel = document.getElementById('at-endpoint');
@@ -344,11 +374,20 @@ function generateConsoleHtml(totalCount) {
   var statusEl = document.getElementById('at-status');
   var bodyWrap = document.getElementById('at-body-wrap');
   var bodyBox = document.getElementById('at-body');
+  var docMap = {};
+  APIS.forEach(function(a){ if(a.group && a.docKey && !docMap[a.docKey]) docMap[a.docKey] = a.docKey; });
+  var curGroup = null, curOg = null;
   APIS.forEach(function(a,i){
+    if(a.group !== curGroup){
+      curGroup = a.group;
+      curOg = document.createElement('optgroup');
+      curOg.label = a.group || '其他';
+      sel.appendChild(curOg);
+    }
     var o = document.createElement('option');
     o.value = i;
-    o.textContent = a.method + '  ' + a.path;
-    sel.appendChild(o);
+    o.textContent = a.method + '  ' + a.path + (a.tip ? '  · ' + a.tip : '');
+    curOg.appendChild(o);
   });
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/\u003c/g,'&lt;').replace(/>/g,'&gt;'); }
   function copy(t){
@@ -360,7 +399,7 @@ function generateConsoleHtml(totalCount) {
     var api = APIS[sel.value];
     if(!api) return;
     var badge = api.method === 'POST' ? '\u003cspan class="at-badge at-post"\u003ePOST\u003c/span\u003e ' : '\u003cspan class="at-badge at-get"\u003eGET\u003c/span\u003e ';
-    descEl.innerHTML = badge + esc(api.desc || '');
+        descEl.innerHTML = badge + esc(api.desc || '') + esc(api.tip ? '  [' + api.tip + ']' : '');
     (api.params || []).forEach(function(p){
       var row = document.createElement('div');
       row.className = 'at-row';
@@ -429,6 +468,22 @@ function generateConsoleHtml(totalCount) {
   renderParams();
   btn.addEventListener('click', doSend);
   document.getElementById('at-reset').addEventListener('click', renderParams);
+  document.getElementById('at-goto').addEventListener('click', function(){
+    var api = APIS[sel.value];
+    if(!api) return;
+    var id = docMap[api.docKey];
+    if(!id){
+      for(var k in docMap){ if(k === api.path || k.indexOf(api.path + '?') === 0){ id = docMap[k]; break; } }
+    }
+    if(!id){ statusEl.textContent = '该接口暂无独立说明条目'; return; }
+    var el = document.getElementById(id);
+    if(!el) return;
+    el.scrollIntoView({behavior:'smooth', block:'start'});
+    var old = el.style.background;
+    el.style.background = '#20342a';
+    setTimeout(function(){ el.style.background = old; }, 1200);
+    statusEl.textContent = '已定位: ' + api.docKey;
+  });
   document.getElementById('at-copy-url').addEventListener('click', function(){
     var u = location.origin + buildUrl();
     copy(u);

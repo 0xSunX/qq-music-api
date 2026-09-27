@@ -57,8 +57,8 @@ export async function onRequest(context) {
             const hash = await hashPassword(password, salt);
             const now = Math.floor(Date.now() / 1000);
             const r = await env.DB.prepare(
-                `INSERT INTO users (username, password_hash, salt, role, device_id, daily_limit, created_at, updated_at)
-                 VALUES (?, ?, ?, 'admin', ?, 50, ?, ?)`
+                `INSERT INTO users (username, password_hash, salt, role, level, device_id, daily_limit, created_at, updated_at)
+                 VALUES (?, ?, ?, 'admin', 'vip', ?, 100000, ?, ?)`
             ).bind(username, hash, salt, "setup-init", now, now).run();
 
             return jsonResponse({

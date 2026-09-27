@@ -44,17 +44,10 @@ export async function onRequest(context) {
     }
 
     if (request.method === "GET") {
-        // 管理侧只回传脱敏状态, 不回吐密钥
+        // 管理侧回传完整凭证(admin 专属, 不脱敏)
         const credential = await getCredentialFromDB(env.DB);
         if (!credential) return jsonResponse({ credential: null });
-        return jsonResponse({
-            credential: {
-                musicid: credential.musicid,
-                login_type: credential.login_type,
-                musickey_createtime: credential.musickey_createtime,
-                key_expires_in: credential.key_expires_in,
-            },
-        });
+        return jsonResponse({ credential });
     }
 
     return errorResponse("Method not allowed", 405);

@@ -64,7 +64,7 @@ tr:hover{background:#222}
     <input id="token" placeholder="粘贴管理员 Token">
     <input id="search" placeholder="搜索用户名 / ID">
     <button id="load">加载</button>
-    <button id="logout" class="ghost">返回首页</button>
+    <button id="logout" class="ghost">返回上一页</button>
   </div>
   <div id="status">请填入 Token 后加载</div>
   <table id="tbl" style="display:none">
@@ -228,7 +228,7 @@ function delUser(id, name){
 document.getElementById('load').onclick = function(){ PAGE = 1; loadUsers(); };
 document.getElementById('prev').onclick = function(){ if(PAGE > 1){ PAGE--; loadUsers(); } };
 document.getElementById('next').onclick = function(){ PAGE++; loadUsers(); };
-document.getElementById('logout').onclick = function(){ location.href = '/'; };
+document.getElementById('logout').onclick = function(){ history.back(); };
 document.getElementById('mSave').onclick = saveEdit;
 document.getElementById('mCancel').onclick = closeEdit;
 maskEl.onclick = function(e){ if(e.target === maskEl) closeEdit(); };
