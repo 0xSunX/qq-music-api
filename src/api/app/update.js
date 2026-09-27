@@ -51,8 +51,52 @@ function compareVersion(a, b) {
     return 0;
 }
 
+async function loadRelease(env, platform, channel) {
+    if (!env || !env.DB) return null;
+    try {
+        await env.DB.prepare(`CREATE TABLE IF NOT EXISTS app_releases (
+            platform TEXT NOT NULL,
+            channel TEXT NOT NULL,
+            latest_version TEXT,
+            latest_build INTEGER DEFAULT 0,
+            min_support_build INTEGER DEFAULT 0,
+            title TEXT DEFAULT '',
+            changelog TEXT DEFAULT '',
+            download_url TEXT DEFAULT '',
+            file_size INTEGER DEFAULT 0,
+            file_hash TEXT DEFAULT '',
+            published_at INTEGER DEFAULT 0,
+            updated_at INTEGER,
+            PRIMARY KEY (platform, channel)
+        )`).run();
+        const row = await env.DB.prepare(
+            "SELECT * FROM app_releases WHERE platform = ? AND channel = ?"
+        ).bind(platform, channel).first();
+        if (!row) return null;
+        let changelog = [];
+        if (row.changelog) {
+            try { changelog = JSON.parse(row.changelog); }
+            catch (e) { changelog = String(row.changelog).split(/\r?\n/).filter(Boolean); }
+        }
+        return {
+            latestVersion: row.latest_version || "",
+            latestBuild: row.latest_build || 0,
+            minSupportBuild: row.min_support_build || 0,
+            title: row.title || "",
+            changelog: changelog,
+            downloadUrl: row.download_url || "",
+            fileSize: row.file_size || 0,
+            fileHash: row.file_hash || "",
+            publishedAt: row.published_at || 0,
+        };
+    } catch (e) {
+        console.error("[Update] 读取 D1 配置失败,回退静态:", e);
+        return null;
+    }
+}
+
 export async function onRequest(context) {
-    const { request } = context;
+    const { request, env } = context;
 
     if (request.method === "OPTIONS") return handleOptions();
     if (request.method !== "GET") return errorResponse("Method not allowed", 405);
@@ -68,12 +112,15 @@ export async function onRequest(context) {
             return errorResponse("Missing required parameter: platform", 400);
         }
 
-        const platformConf = RELEASE_CONFIG[platform];
-        if (!platformConf) {
-            return errorResponse(`Unsupported platform: ${platform}`, 400);
+        const dbConf = await loadRelease(env, platform, channel);
+        let conf = dbConf;
+        if (!conf) {
+            const platformConf = RELEASE_CONFIG[platform];
+            if (!platformConf) {
+                return errorResponse(`Unsupported platform: ${platform}`, 400);
+            }
+            conf = platformConf[channel] || platformConf.official;
         }
-
-        const conf = platformConf[channel] || platformConf.official;
         if (!conf) {
             return errorResponse(`No release config for ${platform}/${channel}`, 404);
         }
