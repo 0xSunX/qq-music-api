@@ -74,7 +74,8 @@ tr:hover{background:#222}
   <table id="tbl" style="display:none">
     <thead><tr>
       <th>ID</th><th>用户名</th><th>等级</th>
-      <th>角色</th><th>状态</th><th>日限额</th><th>操作</th>
+      <th>角色</th><th>状态</th><th>日限额</th>
+      <th>调用次数</th><th>打开次数</th><th>操作</th>
     </tr></thead>
     <tbody id="rows"></tbody>
   </table>
@@ -90,6 +91,7 @@ tr:hover{background:#222}
     <div class="field"><label>ID</label><div class="ro" id="mId"></div></div>
     <div class="field"><label>设备ID</label><div class="ro" id="mDevice"></div></div>
     <div class="field"><label>注册时间</label><div class="ro" id="mCreated"></div></div>
+    <div class="field"><label>用量统计</label><div class="ro" id="mStat">-</div></div>
     <div class="field"><label>用户名</label><input id="eName"></div>
     <div class="field"><label>重置密码 (留空不改)</label><input id="ePass" placeholder="不修改请留空"></div>
     <div class="field"><label>日限额</label><input id="eLimit" type="number"></div>
@@ -115,11 +117,16 @@ var pagerEl = document.getElementById('pager');
 var pageinfoEl = document.getElementById('pageinfo');
 var maskEl = document.getElementById('mask');
 
+function getDeviceId(){
+  var k = 'mtDeviceId', v = localStorage.getItem(k);
+  if(!v){ v = 'web-' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); localStorage.setItem(k, v); }
+  return v;
+}
 function api(action, opts){
   var url = '/api/admin/users?action=' + action;
   var t = tokenEl.value.trim();
   var init = opts || {};
-  init.headers = Object.assign({ 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json' }, init.headers || {});
+  init.headers = Object.assign({ 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json', 'X-Device-Id': getDeviceId() }, init.headers || {});
   return fetch(url, init).then(function(r){ return r.json().then(function(d){ return { ok: r.ok, status: r.status, data: d }; }); });
 }
 function setStatus(msg, isErr){ statusEl.textContent = msg; statusEl.style.color = isErr ? '#f44' : '#888'; }
@@ -156,6 +163,8 @@ function renderRows(list){
     tr.appendChild(td(u.role));
     var tds = td(''); tds.appendChild(tag(u.status === 1 ? '正常' : '禁用', u.status === 1 ? 'tag-on' : 'tag-off')); tr.appendChild(tds);
     tr.appendChild(td(u.level === 'vip' ? '∞' : u.dailyLimit));
+    tr.appendChild(td((u.apiToday || 0) + ' / ' + (u.apiTotal || 0)));
+    tr.appendChild(td((u.appOpenToday || 0) + ' / ' + (u.appOpenTotal || 0)));
     var tdop = document.createElement('td');
     if(u.role === 'admin'){
       var sp = document.createElement('span'); sp.style.color = '#666'; sp.style.fontSize = '.75rem'; sp.textContent = '管理员不可操作'; tdop.appendChild(sp);
@@ -183,6 +192,10 @@ function openEdit(id){
     document.getElementById('eName').value = u.username;
     document.getElementById('ePass').value = '';
     document.getElementById('eLimit').value = u.dailyLimit;
+    var au = res.data.apiUsage || {today:0,total:0};
+    var ao = res.data.appOpen || {today:0,total:0};
+    var statEl = document.getElementById('mStat');
+    if(statEl){ statEl.textContent = 'API调用 今日 ' + au.today + ' / 累计 ' + au.total + '  |  APP打开 今日 ' + ao.today + ' / 累计 ' + ao.total; }
     document.getElementById('eLevel').value = u.level;
     document.getElementById('eStatus').value = String(u.status);
     maskEl.classList.add('show');

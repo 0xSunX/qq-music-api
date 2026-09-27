@@ -14,6 +14,8 @@ import {
     getUserById,
     getUserDetail,
     updateUserInfo,
+    getUsageSummary,
+    getAppOpenSummary,
 } from "../../lib/user.js";
 
 export async function onRequest(context) {
@@ -42,7 +44,9 @@ export async function onRequest(context) {
             if (!id) return errorResponse("缺少 userId", 400);
             const d = await getUserDetail(env.DB, id);
             if (!d) return errorResponse("用户不存在", 404);
-            return jsonResponse({ code: 0, user: d });
+            const apiUsage = await getUsageSummary(env.DB, id);
+            const appOpen = await getAppOpenSummary(env.DB, id);
+            return jsonResponse({ code: 0, user: d, apiUsage: apiUsage, appOpen: appOpen });
         }
 
         if (action === "update") {

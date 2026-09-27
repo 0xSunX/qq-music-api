@@ -11,6 +11,7 @@ import {
     logoutUser,
     publicUser,
     getUsageToday,
+    recordAppOpen,
 } from "../lib/user.js";
 
 export async function onRequest(context) {
@@ -37,6 +38,13 @@ export async function onRequest(context) {
             const body = await request.json();
             const r = await loginUser(env.DB, body.username, body.password, body.deviceId);
             return jsonResponse({ code: 0, token: r.token, user: r.user });
+        }
+
+        if (action === "appopen") {
+            // 记录一次 APP 打开, 需登录
+            if (!user) return errorResponse("Unauthorized", 401);
+            await recordAppOpen(env.DB, user.id);
+            return jsonResponse({ code: 0, message: "已记录" });
         }
 
         if (action === "logout") {

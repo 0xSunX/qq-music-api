@@ -61,6 +61,37 @@ export async function ensureUserTables(db) {
         count INTEGER DEFAULT 0,
         PRIMARY KEY (user_id, date)
     )`).run();
+    await db.prepare(`CREATE TABLE IF NOT EXISTS app_open_daily (
+        user_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        count INTEGER DEFAULT 0,
+        PRIMARY KEY (user_id, date)
+    )`).run();
+}
+
+/** 记录一次 APP 打开, 原子递增当日计数 */
+export async function recordAppOpen(db, userId) {
+    await db.prepare(`INSERT INTO app_open_daily (user_id, date, count) VALUES (?, ?, 1)
+        ON CONFLICT(user_id, date) DO UPDATE SET count = count + 1`)
+        .bind(userId, todayStr()).run();
+}
+
+/** API 调用统计: { today, total } */
+export async function getUsageSummary(db, userId) {
+    const row = await db.prepare(`SELECT
+        (SELECT COUNT FROM usage_daily WHERE user_id = ? AND date = ?) AS today,
+        (SELECT COALESCE(SUM(count),0) FROM usage_daily WHERE user_id = ?) AS total`)
+        .bind(userId, todayStr(), userId).first();
+    return { today: (row && row.today) || 0, total: (row && row.total) || 0 };
+}
+
+/** APP 打开统计: { today, total } */
+export async function getAppOpenSummary(db, userId) {
+    const row = await db.prepare(`SELECT
+        (SELECT COUNT FROM app_open_daily WHERE user_id = ? AND date = ?) AS today,
+        (SELECT COALESCE(SUM(count),0) FROM app_open_daily WHERE user_id = ?) AS total`)
+        .bind(userId, todayStr(), userId).first();
+    return { today: (row && row.today) || 0, total: (row && row.total) || 0 };
 }
 
 // ---------- 用户 CRUD ----------
@@ -124,12 +155,22 @@ export async function logoutUser(db, token) {
     await db.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run();
 }
 
-export async function verifySession(db, token) {
+export async function verifySession(db, token, deviceId) {
     if (!token) return null;
     const now = Math.floor(Date.now() / 1000);
-    const row = await db.prepare(`SELECT s.user_id AS sid, u.* FROM sessions s
-        JOIN users u ON u.id = s.user_id
-        WHERE s.token = ? AND s.expires_at > ?`).bind(token, now).first();
+    const device = String(deviceId || "").trim();
+    let row;
+    if (device) {
+        // 客户端带设备标识: token 必须与登录时的设备一致
+        row = await db.prepare(`SELECT s.user_id AS sid, u.* FROM sessions s
+            JOIN users u ON u.id = s.user_id
+            WHERE s.token = ? AND s.expires_at > ? AND s.device_id = ?`).bind(token, now, device).first();
+    } else {
+        // 未带设备标识: 保持旧行为, 不校验设备
+        row = await db.prepare(`SELECT s.user_id AS sid, u.* FROM sessions s
+            JOIN users u ON u.id = s.user_id
+            WHERE s.token = ? AND s.expires_at > ?`).bind(token, now).first();
+    }
     if (!row) return null;
     if (row.status === 0) return null;
     return row;
@@ -171,6 +212,17 @@ export async function reserveUsage(db, userId, limit) {
 }
 
 /**
+ * 纯计数(不限流): 用于 VIP / 管理员, 或任何不需要限额判断的场景。
+ * 无条件递增当日调用次数, 与 reserveUsage 写入同一张 usage_daily 表。
+ * 注意: 同一请求不要同时调用 reserveUsage 和 countUsage, 否则会重复计数。
+ */
+export async function countUsage(db, userId) {
+    await db.prepare(`INSERT INTO usage_daily (user_id, date, count) VALUES (?, ?, 1)
+        ON CONFLICT(user_id, date) DO UPDATE SET count = count + 1`)
+        .bind(userId, todayStr()).run();
+}
+
+/**
  * 业务失败时回滚一次已占用配额(仅当 reserveUsage 成功过)
  * count>0 兜底, 并发下最坏偏差 ±1, 不影响限流正确性
  */
@@ -185,9 +237,25 @@ export async function releaseUsage(db, userId) {
 export async function listUsers(db, page = 1, size = 20) {
     const offset = (page - 1) * size;
     const total = await db.prepare('SELECT COUNT(*) AS c FROM users').first();
-    const rows = await db.prepare('SELECT * FROM users ORDER BY id DESC LIMIT ? OFFSET ?')
-        .bind(size, offset).all();
-    return { total: total ? total.c : 0, list: (rows.results || []).map(publicUser) };
+    const today = todayStr();
+    const rows = await db.prepare(`SELECT u.*,
+        (SELECT COUNT FROM usage_daily WHERE user_id = u.id AND date = ?) AS api_today,
+        (SELECT COALESCE(SUM(count),0) FROM usage_daily WHERE user_id = u.id) AS api_total,
+        (SELECT COUNT FROM app_open_daily WHERE user_id = u.id AND date = ?) AS open_today,
+        (SELECT COALESCE(SUM(count),0) FROM app_open_daily WHERE user_id = u.id) AS open_total
+        FROM users u ORDER BY u.id DESC LIMIT ? OFFSET ?`)
+        .bind(today, today, size, offset).all();
+    return {
+        total: total ? total.c : 0,
+        list: (rows.results || []).map(function(u){
+            return Object.assign(publicUser(u), {
+                apiToday: u.api_today || 0,
+                apiTotal: u.api_total || 0,
+                appOpenToday: u.open_today || 0,
+                appOpenTotal: u.open_total || 0,
+            });
+        }),
+    };
 }
 
 export async function setUserLevel(db, userId, level) {
