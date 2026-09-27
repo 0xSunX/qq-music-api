@@ -219,7 +219,8 @@ function generateConsoleHtml(totalCount) {
         .at-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
         .at-tools button{flex:1;min-width:80px;cursor:pointer;background:#2a2a2a;border:1px solid #444;color:#e0e0e0;border-radius:4px;padding:6px;font-size:.8rem}
         .at-tools button:hover{background:#333;border-color:#31c27c}
-        #backTop{position:fixed;right:22px;bottom:26px;z-index:200;width:48px;height:48px;border-radius:50%;background:#31c27c;color:#000;border:none;font-size:20px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;transition:transform .2s ease,opacity .2s ease;opacity:.95}
+        #backTop{position:fixed;right:16px;bottom:16px;z-index:9999;width:44px;height:44px;border-radius:50%;background:#31c27c;color:#000;border:none;font-size:20px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;transition:transform .2s ease,opacity .2s ease;opacity:.95}
+        @media (max-width:600px){ #backTop{right:12px;bottom:80px;width:42px;height:42px} }
         #backTop:hover{transform:translateY(-3px);opacity:1}
     </style>
 </head>
@@ -238,16 +239,30 @@ function generateConsoleHtml(totalCount) {
   var gate=document.getElementById('gate');
   function setMsg(t,c){ var m=document.getElementById('gMsg'); m.textContent=t; m.style.color=c||'#888'; }
   function showConsole(){ gate.style.display='none'; var c=document.querySelector('.c'); if(c) c.style.display=''; }
-  if(localStorage.getItem('adminToken')){ showConsole(); }
-  var lo=document.getElementById('adminLogout');
-  if(lo){ lo.onclick=function(){
+  function doLogout(){
     var tk=localStorage.getItem('adminToken');
     if(tk){ fetch('/api/user?action=logout',{method:'POST',headers:{'Authorization':'Bearer '+tk}}).catch(function(){}); }
     localStorage.removeItem('adminToken');
     location.reload();
-  }; }
-  var bt=document.getElementById('backTop');
-  if(bt){ bt.onclick=function(){ window.scrollTo({top:0,behavior:'smooth'}); }; }
+  }
+  function initConsole(){
+    if(localStorage.getItem('adminToken')){ showConsole(); }
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initConsole);
+  } else { initConsole(); }
+  // 事件委托: 绑在 document 上, 不依赖按钮是否已解析
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    if(!t || !t.id){ return; }
+    if(t.id === 'backTop'){
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if(document.documentElement){ document.documentElement.scrollTop = 0; }
+      if(document.body){ document.body.scrollTop = 0; }
+    } else if(t.id === 'adminLogout'){
+      doLogout();
+    }
+  }, false);
   document.getElementById('gBtn').onclick=function(){
     var u=document.getElementById('gUser').value.trim();
     var p=document.getElementById('gPass').value;
