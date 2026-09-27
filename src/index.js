@@ -188,7 +188,8 @@ function generateConsoleHtml(totalCount) {
         .s .count{color:#31c27c;font-weight:600}
         h2{font-size:1.1rem;color:#31c27c;margin:30px 0 15px;border-bottom:1px solid #333;padding-bottom:8px}
         h3{font-size:.95rem;color:#4facfe;margin:22px 0 10px}
-        .e{background:#222;border-radius:8px;padding:16px;margin-bottom:16px}
+        .e{background:#222;border-radius:8px;padding:16px;margin-bottom:16px;scroll-margin-top:24px}
+        .e.flash{box-shadow:0 0 0 2px #31c27c inset}
         .h{display:flex;align-items:center;gap:10px;margin-bottom:10px}
         .m{background:#31c27c;color:#000;padding:2px 8px;border-radius:4px;font-size:.75rem;font-weight:600}
         .p{font-family:monospace;color:#4facfe}
@@ -530,18 +531,22 @@ function generateConsoleHtml(totalCount) {
   document.getElementById('at-goto').addEventListener('click', function(){
     var api = APIS[sel.value];
     if(!api) return;
-    var id = docMap[api.docKey];
-    if(!id){
-      for(var k in docMap){ if(k === api.path || k.indexOf(api.path + '?') === 0){ id = docMap[k]; break; } }
+    var el = null;
+    // 1. 先按 docKey 精确匹配
+    if(api.docKey){ el = document.getElementById(api.docKey); }
+    // 2. 精确 id 未命中, 扫描所有 doc- 块, 用接口路径匹配其标题文本
+    if(!el){
+      var all = document.querySelectorAll('[id^="doc-"]');
+      for(var i = 0; i < all.length; i++){
+        if(all[i].textContent.indexOf(api.path) >= 0){ el = all[i]; break; }
+      }
     }
-    if(!id){ statusEl.textContent = '该接口暂无独立说明条目'; return; }
-    var el = document.getElementById(id);
-    if(!el) return;
-    el.scrollIntoView({behavior:'smooth', block:'start'});
-    var old = el.style.background;
-    el.style.background = '#20342a';
-    setTimeout(function(){ el.style.background = old; }, 1200);
-    statusEl.textContent = '已定位: ' + api.docKey;
+    if(!el){ statusEl.textContent = '该接口暂无独立说明条目'; return; }
+    var top = el.getBoundingClientRect().top + window.pageYOffset - 16;
+    window.scrollTo({ top: top, behavior: 'smooth' });
+    el.classList.add('flash');
+    setTimeout(function(){ el.classList.remove('flash'); }, 1500);
+    statusEl.textContent = '已定位: ' + api.path;
   });
   document.getElementById('at-copy-url').addEventListener('click', function(){
     var u = location.origin + buildUrl();

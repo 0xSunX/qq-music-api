@@ -40,6 +40,10 @@ tr:hover{background:#222}
 .act{cursor:pointer;background:#2a2a2a;border:1px solid #444;color:#e0e0e0;border-radius:3px;padding:3px 8px;font-size:.75rem;margin-right:4px;margin-bottom:2px}
 .act:hover{border-color:#31c27c}
 .act.danger:hover{border-color:#f44;color:#f44}
+.act.vip-on{background:#f0a020;color:#000;border-color:#f0a020;font-weight:700}
+.act.vip-on:hover{background:#ffb733;border-color:#ffb733;color:#000}
+.act.vip-off{background:#2a2a2a;color:#888;border-color:#444}
+.act.vip-off:hover{border-color:#f0a020;color:#f0a020}
 #status{margin:12px 0;color:#888;font-size:.85rem;min-height:20px}
 .pager{margin-top:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .pager button{cursor:pointer;background:#2a2a2a;border:1px solid #444;color:#e0e0e0;border-radius:4px;padding:6px 12px}
@@ -157,8 +161,8 @@ function renderRows(list){
       var sp = document.createElement('span'); sp.style.color = '#666'; sp.style.fontSize = '.75rem'; sp.textContent = '管理员不可操作'; tdop.appendChild(sp);
     } else {
       tdop.appendChild(mkBtn('编辑', 'ghost', function(){ openEdit(u.id); }));
-      tdop.appendChild(mkBtn('改VIP', 'ghost', function(){ setLevel(u.id, 'vip'); }));
-      tdop.appendChild(mkBtn('改普通', 'ghost', function(){ setLevel(u.id, 'normal'); }));
+      var vipBtn = mkBtn('VIP', u.level === 'vip' ? 'vip-on' : 'vip-off', function(){ setLevel(u.id, u.level === 'vip' ? 'normal' : 'vip'); });
+      tdop.appendChild(vipBtn);
       tdop.appendChild(mkBtn(u.status === 1 ? '禁用' : '启用', 'ghost', function(){ setStatus2(u.id, u.status === 1 ? 0 : 1); }));
       tdop.appendChild(mkBtn('删除', 'danger', function(){ delUser(u.id, u.username); }));
     }
