@@ -15,6 +15,8 @@ import * as album from "./api/album.js";
 import * as playlist from "./api/playlist.js";
 import * as singer from "./api/singer.js";
 import * as top from "./api/top.js";
+import * as appUpdate from "./api/app/update.js";
+import * as appNotice from "./api/app/notice.js";
 import * as admin from "./admin.js";
 import { ensureStatsTable, incrementCount, getTotalCount } from "./lib/stats.js";
 
@@ -39,6 +41,8 @@ const routes = {
     "/api/playlist": playlist,
     "/api/singer": singer,
     "/api/top": top,
+    "/api/app/update": appUpdate,
+    "/api/app/notice": appNotice,
     "/admin": admin,
 };
 
@@ -53,6 +57,8 @@ const statsEndpoints = [
     "/api/playlist",
     "/api/singer",
     "/api/top",
+    "/api/app/update",
+    "/api/app/notice",
 ];
 
 /**
@@ -108,6 +114,9 @@ function generateIndexHtml(totalCount) {
     <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/singer</span></div><p class="d">获取歌手信息</p><div class="ex">GET /api/singer?mid=0025NhlN2yWrP4</div></div>
     <h2>排行榜</h2>
     <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/top</span></div><p class="d">获取排行榜列表或详情</p><div class="ex">GET /api/top</div><div class="ex">GET /api/top?id=4&num=50</div></div>
+    <h2>APP 配置</h2>
+    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/app/update</span></div><p class="d">获取 APP 更新配置(版本比对与强制更新判断)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">platform</span><span class="r">*</span></td><td>string</td><td>android / ios</td></tr><tr><td><span class="pm">version</span></td><td>string</td><td>客户端当前版本,如 1.2.0</td></tr><tr><td><span class="pm">build</span></td><td>int</td><td>构建号,用于强制更新判断</td></tr><tr><td><span class="pm">channel</span></td><td>string</td><td>渠道,默认 official</td></tr></table><div class="ex">GET /api/app/update?platform=android&version=1.0.0&build=80</div><p class="d">返回 hasUpdate / forceUpdate / latestVersion / changelog / downloadUrl / fileHash 等字段</p></div>
+    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/app/notice</span></div><p class="d">获取 APP 公告(支持平台/版本/渠道过滤与定时上下线)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">platform</span></td><td>string</td><td>android / ios,不传返回全平台</td></tr><tr><td><span class="pm">version</span></td><td>string</td><td>客户端版本,用于版本限定公告</td></tr><tr><td><span class="pm">channel</span></td><td>string</td><td>渠道,默认 official</td></tr></table><div class="ex">GET /api/app/notice?platform=android&version=1.2.0</div><p class="d">返回 notices 数组(type/level/title/content/actionUrl/forceShow)及 serverTime</p></div>
     <footer><a href="https://doc.ygking.top">文档</a> · <a href="https://github.com/tooplick/qq-music-api">GitHub</a></footer>
 </div>
 </body>

@@ -7,7 +7,8 @@ import {
     parseCredential,
     ensureCredentialTable,
     getCredentialFromDB,
-    saveCredentialToDB
+    saveCredentialToDB,
+    syncCredentialFromEnv
 } from "./lib/credential.js";
 import { corsHeaders } from "./lib/request.js";
 
@@ -82,21 +83,16 @@ export async function onRequest(context) {
             // 确保表存在
             await ensureCredentialTable(env.DB);
 
-            // 尝试获取凭证
-            credential = await getCredentialFromDB(env.DB);
+            // 以环境变量为准同步凭证:musickey 不一致就覆盖,库空则初始化
+            const syncResult = await syncCredentialFromEnv(env.DB, env.INITIAL_CREDENTIAL);
+            credential = syncResult.credential;
 
-            if (!credential && env.INITIAL_CREDENTIAL) {
-                // 从环境变量初始化
-                const initial = parseCredential(env.INITIAL_CREDENTIAL);
-                if (initial) {
-                    await saveCredentialToDB(env.DB, initial);
-                    credential = initial;
-                    initResult = "✅ 凭证已从环境变量初始化到数据库";
-                }
-            } else if (credential) {
-                initResult = "✅ 数据库已有凭证";
+            if (syncResult.synced) {
+                initResult = `✅ ${syncResult.reason}`;
+            } else if (syncResult.credential) {
+                initResult = `ℹ️ ${syncResult.reason}`;
             } else {
-                initResult = "⚠️ 数据库为空，请设置 INITIAL_CREDENTIAL 环境变量";
+                initResult = `⚠️ ${syncResult.reason}`;
             }
         } catch (err) {
             initResult = `❌ 初始化失败: ${err.message}`;
