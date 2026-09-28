@@ -3,12 +3,7 @@
  * GET /api/credential - 返回当前凭证
  */
 
-import {
-    parseCredential,
-    ensureCredentialTable,
-    getCredentialFromDB,
-    saveCredentialToDB
-} from "../lib/credential.js";
+import { getCredential } from "../lib/credential.js";
 import { jsonResponse, errorResponse, handleOptions } from "../lib/request.js";
 
 export async function onRequest(context) {
@@ -29,21 +24,8 @@ export async function onRequest(context) {
     }
 
     try {
-        // 确保表存在
-        await ensureCredentialTable(env.DB);
-
-        // 尝试从数据库获取凭证
-        let credential = await getCredentialFromDB(env.DB);
-
-        // 如果没有凭证，尝试从环境变量初始化
-        if (!credential && env.INITIAL_CREDENTIAL) {
-            const initialCredential = parseCredential(env.INITIAL_CREDENTIAL);
-            if (initialCredential) {
-                await saveCredentialToDB(env.DB, initialCredential);
-                credential = initialCredential;
-                console.log("初始凭证已从环境变量导入");
-            }
-        }
+        // 统一入口:环境变量与库中不一致会同步覆盖
+        const credential = await getCredential(env);
 
         if (!credential) {
             return jsonResponse({
@@ -52,22 +34,17 @@ export async function onRequest(context) {
             }, 404);
         }
 
-        // 构建返回格式
-        const response = {
+        // 脱敏返回: 普通登录用户不应拿到全站共用的密钥与 token
+        return jsonResponse({
             credential: {
-                ...credential,
+                musicid: credential.musicid,
+                login_type: credential.login_type,
                 extra_fields: {
                     musickeyCreateTime: credential.musickey_createtime,
                     keyExpiresIn: credential.key_expires_in,
                 },
             },
-        };
-
-        // 移除内部字段
-        delete response.credential.musickey_createtime;
-        delete response.credential.key_expires_in;
-
-        return jsonResponse(response);
+        });
 
     } catch (err) {
         console.error("读取凭证失败:", err);

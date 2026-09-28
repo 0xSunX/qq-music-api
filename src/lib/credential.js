@@ -140,7 +140,7 @@ export async function saveCredentialToDB(db, credential) {
             credential.musickey,
             credential.unionid,
             credential.str_musicid,
-            credential.refresh_key,
+            credential.refresh_key || "",
             credential.encrypt_uin,
             credential.login_type,
             credential.musickey_createtime,
@@ -163,7 +163,7 @@ export async function saveCredentialToDB(db, credential) {
             credential.musickey,
             credential.unionid,
             credential.str_musicid,
-            credential.refresh_key,
+            credential.refresh_key || "",
             credential.encrypt_uin,
             credential.login_type,
             credential.musickey_createtime,
@@ -171,4 +171,57 @@ export async function saveCredentialToDB(db, credential) {
             now
         ).run();
     }
+}
+
+/**
+ * 环境变量凭证种子
+ * 仅在数据库为空时用 INITIAL_CREDENTIAL 初始化; 库非空一律以库为准,
+ * 之后由 /api/credential/refresh 自动续期或 /api/admin/credential 手动更新, 环境变量不再覆盖。
+ * @param {D1Database} db
+ * @param {string} envCredential INITIAL_CREDENTIAL 原始字符串
+ * @returns {Promise<{synced: boolean, reason: string, credential: object|null}>}
+ */
+export async function syncCredentialFromEnv(db, envCredential) {
+    // 表不存在时先建表,否则首次调用会直接抛
+    await ensureCredentialTable(db);
+
+    const current = await getCredentialFromDB(db);
+
+    // 库中已有凭证: 环境变量不再参与, 直接返回库中凭证
+    if (current) {
+        return { synced: false, reason: "数据库已有凭证, INITIAL_CREDENTIAL 仅作首次种子", credential: current };
+    }
+
+    if (!envCredential) {
+        return { synced: false, reason: "未设置 INITIAL_CREDENTIAL 且数据库为空", credential: null };
+    }
+
+    let parsed = null;
+    try {
+        parsed = parseCredential(envCredential);
+    } catch (e) {
+        return { synced: false, reason: `INITIAL_CREDENTIAL 解析异常: ${e.message}`, credential: null };
+    }
+
+    if (!parsed) {
+        return { synced: false, reason: "INITIAL_CREDENTIAL 解析失败(JSON 格式无效)", credential: null };
+    }
+    if (!parsed.musicid || !parsed.musickey) {
+        return { synced: false, reason: "INITIAL_CREDENTIAL 缺少 musicid 或 musickey", credential: null };
+    }
+
+    // 仅在库为空时写入种子
+    await saveCredentialToDB(db, parsed);
+    return { synced: true, reason: "已用 INITIAL_CREDENTIAL 初始化数据库", credential: parsed };
+}
+
+/**
+ * 统一凭证获取入口:各 API 直接 import 这个,不要再各自实现
+ * @param {object} env Workers 环境(需含 DB,可选 INITIAL_CREDENTIAL)
+ * @returns {Promise<object|null>}
+ */
+export async function getCredential(env) {
+    if (!env || !env.DB) return null;
+    const sync = await syncCredentialFromEnv(env.DB, env.INITIAL_CREDENTIAL);
+    return sync.credential;
 }
