@@ -405,7 +405,7 @@ function generateConsoleHtml(totalCount) {
     {group:'APP 配置',docKey:'doc-appupdate',tip:'更新-读取(调试)',path:'/api/admin/appconfig',method:'GET',desc:'读取已配置的版本更新(需 admin)',params:[{k:'type',v:'update'}]},
     {group:'APP 配置',docKey:'doc-appupdate',tip:'更新-写入/更新(调试)',path:'/api/admin/appconfig',method:'POST',desc:'新增或修改版本更新,platform+channel 覆盖(需 admin)',params:[{k:'type',v:'update'}],body:'{ \"platform\": \"android\", \"channel\": \"official\", \"latestVersion\": \"1.3.0\", \"latestBuild\": 130, \"minSupportBuild\": 100, \"title\": \"发现新版本\", \"changelog\": [\"修复播放偶发崩溃\", \"新增歌单同步\"], \"downloadUrl\": \"https://example.com/app-release.apk\", \"fileSize\": 28311552, \"fileHash\": \"sha256:xxxx\", \"publishedAt\": 1730000000 }'},
     {group:'凭证管理',docKey:'doc-refresh',tip:'刷新凭证',path:'/api/credential/refresh',method:'POST',desc:'手动刷新凭证(force 是 query 参数, body 可留空)',params:[{k:'force',v:'true'}]},
-    {group:'用户管理',docKey:'doc-adminusers',tip:'用户列表/详情',docKey:'doc-adminusers-list',path:'/api/admin/users',method:'GET',desc:'用户列表/详情(需 admin, action=list|detail; 含调用次数与APP打开统计)',params:[{k:'action',v:'list'},{k:'page',v:'1'},{k:'size',v:'20'}]},
+    {group:'用户管理',docKey:'doc-adminusers-list',tip:'用户列表/详情',path:'/api/admin/users',method:'GET',desc:'用户列表/详情(需 admin, action=list|detail; 含调用次数与APP打开统计)',params:[{k:'action',v:'list'},{k:'page',v:'1'},{k:'size',v:'20'}]},
     {group:'凭证管理',docKey:'doc-admincred',tip:'凭证状态(admin)',path:'/api/admin/credential',method:'GET',desc:'查看凭证完整状态(需 admin)',params:[]},
     {group:'系统维护',docKey:'doc-setup',tip:'站点初始化',path:'/api/setup',method:'GET',desc:'站点初始化状态(公开)',params:[]},
     {group:'用户系统',docKey:'doc-register',tip:'注册',path:'/api/user',method:'POST',desc:'注册账号(公开)',params:[{k:'action',v:'register'}],body:'{ "username":"test", "password":"123456", "deviceId":"abc123" }'},
@@ -493,20 +493,12 @@ function generateConsoleHtml(totalCount) {
   function jesc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function hlJson(txt){
     var s = jesc(String(txt));
-    var re = /("(?:[^"\\]|\\.)*"\s*:)|("(?:[^"\\]|\\.)*")|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+    var re = /("(?:[^"]*)" *:)|("(?:[^"]*)")|(true|false|null)|(-?[0-9]+(?:[.][0-9]+)?)/g;
     return s.replace(re, function(m,a,b,c){
       if(a) return '<span class="jk">'+m+'</span>';
       if(b) return '<span class="js">'+m+'</span>';
       if(c) return '<span class="jb">'+m+'</span>';
       return '<span class="jn">'+m+'</span>';
-    });
-  }
-  function hlUrl(txt){
-    var s = jesc(String(txt));
-    return s.replace(/(https?:\/\/[^\s?]+)|(\/[a-z0-9\/_.-]+)|(\?[^\s]*)/gi, function(m,full,path,qs){
-      if(full) return '<span class="jp">'+m+'</span>';
-      if(path) return '<span class="jp">'+m+'</span>';
-      return m;
     });
   }
   function copy(t){
@@ -573,7 +565,7 @@ function generateConsoleHtml(totalCount) {
     }
     opts.headers = hdrs;
     statusEl.textContent = '请求中...';
-    resp.innerHTML = '<span class="jm">' + esc(api.method) + '</span> ' + hlUrl(url) + NL + '<span class="at-dim">请求中...</span>';
+    resp.innerHTML = '<span class="jm">' + esc(api.method) + '</span> ' + esc(url) + NL + '<span class="at-dim">请求中...</span>';
     var t0 = Date.now();
     fetch(url, opts).then(function(r){
       return r.text().then(function(txt){ return { status: r.status, ok: r.ok, txt: txt }; });
@@ -582,11 +574,11 @@ function generateConsoleHtml(totalCount) {
       statusEl.innerHTML = '\u003cspan class="' + (res.ok ? 'ok' : 'err') + '"\u003eHTTP ' + res.status + '\u003c/span\u003e · ' + ms + 'ms · ' + api.method + ' ' + esc(url);
       var out = res.txt;
       try { out = JSON.stringify(JSON.parse(res.txt), null, 2); } catch(e){}
-      resp.innerHTML = '<span class="jm">' + esc(api.method) + '</span> ' + hlUrl(url) + NL + '<span class="' + (res.ok ? 'jp' : 'js') + '">HTTP ' + res.status + '</span> · ' + ms + 'ms' + NL + NL + hlJson(out);
+      resp.innerHTML = '<span class="jm">' + esc(api.method) + '</span> ' + esc(url) + NL + '<span class="' + (res.ok ? 'jp' : 'js') + '">HTTP ' + res.status + '</span> · ' + ms + 'ms' + NL + NL + hlJson(out);
     }).catch(function(e){
       var ms = Date.now() - t0;
       statusEl.innerHTML = '\u003cspan class="err"\u003e请求失败\u003c/span\u003e · ' + ms + 'ms';
-      resp.innerHTML = '<span class="jm">' + esc(api.method) + '</span> ' + hlUrl(url) + NL + NL + '<span class="js">请求失败: ' + esc(e.message) + '</span>';
+      resp.innerHTML = '<span class="jm">' + esc(api.method) + '</span> ' + esc(url) + NL + NL + '<span class="js">请求失败: ' + esc(e.message) + '</span>';
     });
   }
   sel.addEventListener('change', function(){ renderParams(); applyDefaultBody(); });
