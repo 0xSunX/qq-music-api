@@ -226,7 +226,14 @@ function generateConsoleHtml(totalCount) {
         .at-body-wrap2{position:relative;margin-bottom:8px}
         .at-hl{position:absolute;inset:0;margin:0;padding:8px;background:#181818;border:1px solid #333;border-radius:4px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;overflow:auto;pointer-events:none;color:#e0e0e0;tab-size:2}
         .at-body-ov{position:relative;z-index:2;background:transparent;color:transparent;caret-color:#31c27c;min-height:120px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;tab-size:2}
-        .jk{color:#4facfe}.js{color:#f0a020}.jn{color:#31c27c}.jb{color:#c678dd}
+        .jk{color:#569cd6}.js{color:#ce9178}.jn{color:#b5cea8}.jb{color:#569cd6}
+        .jp{color:#4ec9b0;font-weight:600}.jm{color:#dcdcaa}
+        .at-resp,.at-hl{background:#1e1e1e;border-color:#3c3c3c;color:#d4d4d4}
+        .at-resp{color:#d4d4d4}
+        .at-dim{color:#808080}
+        #at-endpoint{background:#1e1e1e;border-color:#3c3c3c;color:#4ec9b0;font-weight:600}
+        .at-body,.at-body-ov{background:transparent;color:transparent;caret-color:#4ec9b0;border-color:transparent}
+        .at-body{border-color:transparent}
         #backTop{position:fixed;right:16px;bottom:16px;z-index:9999;width:44px;height:44px;border-radius:50%;background:#31c27c;color:#000;border:none;font-size:20px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;transition:transform .2s ease,opacity .2s ease;opacity:.95}
         @media (max-width:600px){ #backTop{right:12px;bottom:80px;width:42px;height:42px} }
         #backTop:hover{transform:translateY(-3px);opacity:1}
@@ -494,6 +501,14 @@ function generateConsoleHtml(totalCount) {
       return '<span class="jn">'+m+'</span>';
     });
   }
+  function hlUrl(txt){
+    var s = jesc(String(txt));
+    return s.replace(/(https?:\/\/[^\s?]+)|(\/[a-z0-9\/_.-]+)|(\?[^\s]*)/gi, function(m,full,path,qs){
+      if(full) return '<span class="jp">'+m+'</span>';
+      if(path) return '<span class="jp">'+m+'</span>';
+      return m;
+    });
+  }
   function copy(t){
     if(navigator.clipboard){ navigator.clipboard.writeText(t); }
     else { var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
@@ -503,7 +518,7 @@ function generateConsoleHtml(totalCount) {
     var api = APIS[sel.value];
     if(!api) return;
     var badge = api.method === 'POST' ? '\u003cspan class="at-badge at-post"\u003ePOST\u003c/span\u003e ' : '\u003cspan class="at-badge at-get"\u003eGET\u003c/span\u003e ';
-        descEl.innerHTML = badge + esc(api.desc || '') + esc(api.tip ? '  [' + api.tip + ']' : '');
+        descEl.innerHTML = badge + '<span class="jp">' + esc(api.path) + '</span> ' + esc(api.desc || '') + esc(api.tip ? '  [' + api.tip + ']' : '');
     (api.params || []).forEach(function(p){
       var row = document.createElement('div');
       row.className = 'at-row';
@@ -558,7 +573,7 @@ function generateConsoleHtml(totalCount) {
     }
     opts.headers = hdrs;
     statusEl.textContent = '请求中...';
-    resp.textContent = api.method + ' ' + url + NL + '请求中...';
+    resp.innerHTML = '<span class="jm">' + esc(api.method) + '</span> ' + hlUrl(url) + NL + '<span class="at-dim">请求中...</span>';
     var t0 = Date.now();
     fetch(url, opts).then(function(r){
       return r.text().then(function(txt){ return { status: r.status, ok: r.ok, txt: txt }; });
@@ -567,11 +582,11 @@ function generateConsoleHtml(totalCount) {
       statusEl.innerHTML = '\u003cspan class="' + (res.ok ? 'ok' : 'err') + '"\u003eHTTP ' + res.status + '\u003c/span\u003e · ' + ms + 'ms · ' + api.method + ' ' + esc(url);
       var out = res.txt;
       try { out = JSON.stringify(JSON.parse(res.txt), null, 2); } catch(e){}
-      resp.innerHTML = jesc(api.method + ' ' + url + NL + 'HTTP ' + res.status + ' · ' + ms + 'ms' + NL + NL) + hlJson(out);
+      resp.innerHTML = '<span class="jm">' + esc(api.method) + '</span> ' + hlUrl(url) + NL + '<span class="' + (res.ok ? 'jp' : 'js') + '">HTTP ' + res.status + '</span> · ' + ms + 'ms' + NL + NL + hlJson(out);
     }).catch(function(e){
       var ms = Date.now() - t0;
       statusEl.innerHTML = '\u003cspan class="err"\u003e请求失败\u003c/span\u003e · ' + ms + 'ms';
-      resp.textContent = api.method + ' ' + url + NL + NL + '请求失败: ' + e.message;
+      resp.innerHTML = '<span class="jm">' + esc(api.method) + '</span> ' + hlUrl(url) + NL + NL + '<span class="js">请求失败: ' + esc(e.message) + '</span>';
     });
   }
   sel.addEventListener('change', function(){ renderParams(); applyDefaultBody(); });
