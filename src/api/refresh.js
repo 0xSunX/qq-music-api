@@ -1,17 +1,19 @@
 /**
  * Cloudflare Pages Function - 凭证刷新
- * POST /api/refresh - 手动刷新凭证
+ * POST /api/credential/refresh - 手动刷新凭证
  * Cron triggered - 自动刷新
  */
 
 import {
     ensureCredentialTable,
     getCredentialFromDB,
-    saveCredentialToDB
+    saveCredentialToDB,
+    syncCredentialFromEnv
 } from "../lib/credential.js";
 import { buildCommonParams, buildCookies, jsonResponse, errorResponse, handleOptions } from "../lib/request.js";
 import { generateSign } from "../lib/sign.js";
 import { API_CONFIG } from "../lib/common.js";
+import { ensureUrlCacheTable, cleanExpiredUrlCache } from "../lib/urlcache.js";
 
 /**
  * 刷新凭证
@@ -19,16 +21,11 @@ import { API_CONFIG } from "../lib/common.js";
  * @returns {Promise<object>}
  */
 async function refreshCredential(credential) {
-    if (!credential.refresh_key) {
-        throw new Error("缺少 refresh_key，请检查凭证是否包含 refresh_key 字段");
-    }
-
     if (!credential.refresh_token) {
         throw new Error("缺少 refresh_token，请检查凭证是否包含 refresh_token 字段");
     }
 
     const params = {
-        refresh_key: credential.refresh_key,
         refresh_token: credential.refresh_token,
         musickey: credential.musickey,
         musicid: parseInt(credential.musicid) || 0,  // 必须是整数
@@ -94,12 +91,25 @@ async function refreshCredential(credential) {
  * @param {boolean} force 强制刷新
  * @returns {Promise<object>}
  */
-async function doRefresh(db, force = false) {
+async function doRefresh(db, force = false, envCredential = null) {
     await ensureCredentialTable(db);
+
+    // 环境变量仅作首次种子: 库为空时用它初始化, 库非空不覆盖
+    // 刷新成功后写回数据库的新凭证不会再被环境变量顶掉
+    if (envCredential) {
+        try {
+            const sync = await syncCredentialFromEnv(db, envCredential);
+            if (sync.synced) {
+                console.log(`[Refresh] ${sync.reason}`);
+            }
+        } catch (e) {
+            console.warn("[Refresh] 环境变量种子失败:", e.message);
+        }
+    }
 
     const credential = await getCredentialFromDB(db);
     if (!credential) {
-        return { success: false, message: "未找到凭证" };
+        return { success: false, message: "未找到凭证,请设置 INITIAL_CREDENTIAL 或通过 /admin 写入" };
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -110,8 +120,9 @@ async function doRefresh(db, force = false) {
 
     console.log(`[Refresh] 凭证剩余有效期: ${Math.floor(remainingTime / 3600)} 小时`);
 
-    // 如果剩余时间少于 48 小时或强制刷新（配合每天一次的 Cron 任务）
-    if (remainingTime < 48 * 3600 || force) {
+    // 相对阈值:剩余不足有效期 1/3 时刷新,避免写死 48h 撞上短有效期凭证
+    const refreshThreshold = Math.floor(expiresIn / 3);
+    if (remainingTime < refreshThreshold || force) {
         console.log("[Refresh] 开始刷新凭证...");
 
         const newData = await refreshCredential(credential);
@@ -121,7 +132,6 @@ async function doRefresh(db, force = false) {
             ...credential,
             musickey: newData.musickey || credential.musickey,
             musicid: newData.musicid || credential.musicid,
-            refresh_key: newData.refresh_key || credential.refresh_key,
             refresh_token: newData.refresh_token || credential.refresh_token,
             musickey_createtime: now,
             key_expires_in: newData.keyExpiresIn || 259200,
@@ -144,16 +154,25 @@ export async function onSchedule(context) {
 
     try {
         console.log("[Cron] 开始检查凭证状态...");
-        const result = await doRefresh(env.DB, false);
+        const result = await doRefresh(env.DB, false, env.INITIAL_CREDENTIAL);
         console.log(`[Cron] ${result.message}`);
     } catch (err) {
         console.error("[Cron] 刷新凭证失败:", err);
+    }
+
+    // 顺带清理过期的播放链接缓存
+    try {
+        await ensureUrlCacheTable(env.DB);
+        await cleanExpiredUrlCache(env.DB);
+        console.log("[Cron] 已清理过期链接缓存");
+    } catch (err) {
+        console.error("[Cron] 清理链接缓存失败:", err);
     }
 }
 
 /**
  * HTTP 触发器
- * POST /api/refresh - 手动刷新
+ * POST /api/credential/refresh - 手动刷新
  */
 export async function onRequest(context) {
     const { request, env } = context;
@@ -170,7 +189,7 @@ export async function onRequest(context) {
         const url = new URL(request.url);
         const force = url.searchParams.get("force") === "true";
 
-        const result = await doRefresh(env.DB, force);
+        const result = await doRefresh(env.DB, force, env.INITIAL_CREDENTIAL);
         return jsonResponse(result);
     } catch (err) {
         console.error("刷新凭证失败:", err);
