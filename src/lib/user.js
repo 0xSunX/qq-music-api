@@ -143,11 +143,14 @@ export async function loginUser(db, username, password, deviceId) {
     const hash = await hashPassword(password, user.salt);
     if (hash !== user.password_hash) throw new Error('用户名或密码错误');
 
+    const device = String(deviceId || "").trim();
+    if (!device) throw new Error('缺少设备标识');
+
     const token = randomHex(32);
     const now = Math.floor(Date.now() / 1000);
     await db.prepare(`INSERT INTO sessions (token, user_id, device_id, expires_at, created_at)
         VALUES (?, ?, ?, ?, ?)`)
-        .bind(token, user.id, deviceId || '', now + SESSION_TTL, now).run();
+        .bind(token, user.id, device, now + SESSION_TTL, now).run();
     return { token, user: publicUser(user) };
 }
 
@@ -166,10 +169,8 @@ export async function verifySession(db, token, deviceId) {
             JOIN users u ON u.id = s.user_id
             WHERE s.token = ? AND s.expires_at > ? AND s.device_id = ?`).bind(token, now, device).first();
     } else {
-        // 未带设备标识: 保持旧行为, 不校验设备
-        row = await db.prepare(`SELECT s.user_id AS sid, u.* FROM sessions s
-            JOIN users u ON u.id = s.user_id
-            WHERE s.token = ? AND s.expires_at > ?`).bind(token, now).first();
+        // 未带设备标识: 直接拒绝。设备绑定必须生效, 否则 token 可在任意设备复用
+        return null;
     }
     if (!row) return null;
     if (row.status === 0) return null;

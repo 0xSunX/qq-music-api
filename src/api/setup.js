@@ -44,29 +44,34 @@ export async function onRequest(context) {
                 return errorResponse("密码至少 6 位", 400);
             }
 
-            // 清空所有业务表
+            // 清空所有业务表(逐表执行, 失败记录到 warnings, 不再静默吞掉)
             const tables = ["credentials", "sessions", "usage_daily", "users", "api_stats"];
+            const warnings = [];
             for (const t of tables) {
-                try { await env.DB.prepare("DELETE FROM " + t).run(); } catch (e) { /* 表可能不存在 */ }
+                try { await env.DB.prepare("DELETE FROM " + t).run(); }
+                catch (e) { warnings.push(`${t}: ${e.message}`); }
             }
             // 重置自增
             try { await env.DB.prepare("DELETE FROM sqlite_sequence").run(); } catch (e) { /* 无自增表时忽略 */ }
 
-            // 创建初始管理员
+            // 创建初始管理员 (设备标识用随机值, 避免与 setup-init 固定串冲突)
             const salt = randomHex(16);
             const hash = await hashPassword(password, salt);
             const now = Math.floor(Date.now() / 1000);
+            const adminDevice = "setup-" + randomHex(8);
             const r = await env.DB.prepare(
                 `INSERT INTO users (username, password_hash, salt, role, level, device_id, daily_limit, created_at, updated_at)
                  VALUES (?, ?, ?, 'admin', 'vip', ?, 100000, ?, ?)`
-            ).bind(username, hash, salt, "setup-init", now, now).run();
+            ).bind(username, hash, salt, adminDevice, now, now).run();
 
-            return jsonResponse({
+            const resp = {
                 code: 0,
-                message: "初始化完成",
+                message: warnings.length ? "初始化完成(部分表清理失败, 见 warnings)" : "初始化完成",
                 adminId: r.meta.last_row_id,
                 username,
-            });
+            };
+            if (warnings.length) resp.warnings = warnings;
+            return jsonResponse(resp);
         } catch (err) {
             console.error("初始化失败:", err);
             return errorResponse(err.message, 500);

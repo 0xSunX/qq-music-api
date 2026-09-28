@@ -247,7 +247,7 @@ function generateConsoleHtml(totalCount) {
   function showConsole(){ gate.style.display='none'; var c=document.querySelector('.c'); if(c) c.style.display=''; }
   function doLogout(){
     var tk=localStorage.getItem('adminToken');
-    if(tk){ fetch('/api/user?action=logout',{method:'POST',headers:{'Authorization':'Bearer '+tk}}).catch(function(){}); }
+    if(tk){ fetch('/api/user?action=logout',{method:'POST',headers:{'Authorization':'Bearer '+tk,'X-Device-Id':getDeviceId()}}).catch(function(){}); }
     localStorage.removeItem('adminToken');
     location.reload();
   }
@@ -336,7 +336,7 @@ function generateConsoleHtml(totalCount) {
     <h2>用户系统接口</h2>
     <p class="d">本组含: POST ?action=register(注册)、POST ?action=login(登录)、POST ?action=logout(登出)、GET ?action=me(我的信息)、POST ?action=appopen(记录APP打开)。除 register/login 外均需请求头 Authorization: Bearer 你的token。</p>
     <div class="e" id="doc-register"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=register</span></div><p class="d">注册账号(同一设备仅能注册一个)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">username</span><span class="r">*</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span><span class="r">*</span></td><td>string</td><td>至少 6 位</td></tr><tr><td><span class="pm">deviceId</span><span class="r">*</span></td><td>string</td><td>设备指纹</td></tr></table><div class="ex">POST /api/user?action=register{ "username":"test", "password":"123456", "deviceId":"abc123" }</div><p class="d">注册用户均为普通用户, 管理员需通过 /api/setup 初始化创建</p></div>
-    <div class="e" id="doc-login"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=login</span></div><p class="d">登录, 返回 token 用于后续接口鉴权</p><div class="ex">POST /api/user?action=login{ "username":"test", "password":"123456" }</div><p class="d">返回 token, 后续请求头带: Authorization: Bearer 你的token</p></div>
+    <div class="e" id="doc-login"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=login</span></div><p class="d">登录, 返回 token 用于后续接口鉴权</p><div class="ex">POST /api/user?action=login{ "username":"test", "password":"123456", "deviceId":"abc123" }</div><p class="d">返回 token, 后续请求头带: Authorization: Bearer 你的token</p></div>
     <div class="e" id="doc-logout"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=logout</span></div><p class="d">登出, 注销当前 token</p></div>
     <div class="e" id="doc-me"><div class="h"><span class="m">GET</span><span class="p">/api/user?action=me</span></div><p class="d">查询当前用户信息与今日用量(需 token)</p><div class="ex">GET /api/user?action=meAuthorization: Bearer 你的token</div><p class="d">返回字段: code / user / usageToday(今日已用) / remaining(vip 为 -1)</p></div>
     <div class="e" id="doc-appopen"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=appopen</span></div><p class="d">记录一次 APP 打开(需 token, 用于用户管理页统计展示)</p><div class="ex">POST /api/user?action=appopenAuthorization: Bearer 你的token</div><p class="d">返回字段: code / message</p></div>
@@ -382,13 +382,13 @@ function generateConsoleHtml(totalCount) {
     {group:'APP 配置',docKey:'doc-appnotice',tip:'公告-写入/更新(调试)',path:'/api/admin/appconfig',method:'POST',desc:'新增或修改公告,同 id 覆盖(需 admin)',params:[{k:'type',v:'notice'}],body:'{ \"id\": \"notice_welcome\", \"type\": \"popup\", \"level\": \"info\", \"title\": \"公告标题\", \"content\": \"公告正文,一眼看清要补什么\", \"actionText\": \"知道了\", \"actionUrl\": \"\", \"forceShow\": false, \"platforms\": \"android,ios\", \"minVersion\": \"\", \"maxVersion\": \"\", \"channels\": \"\", \"startAt\": 0, \"endAt\": 0, \"priority\": 10, \"enabled\": true }'},
     {group:'APP 配置',docKey:'doc-appupdate',tip:'更新-读取(调试)',path:'/api/admin/appconfig',method:'GET',desc:'读取已配置的版本更新(需 admin)',params:[{k:'type',v:'update'}]},
     {group:'APP 配置',docKey:'doc-appupdate',tip:'更新-写入/更新(调试)',path:'/api/admin/appconfig',method:'POST',desc:'新增或修改版本更新,platform+channel 覆盖(需 admin)',params:[{k:'type',v:'update'}],body:'{ \"platform\": \"android\", \"channel\": \"official\", \"latestVersion\": \"1.3.0\", \"latestBuild\": 130, \"minSupportBuild\": 100, \"title\": \"发现新版本\", \"changelog\": [\"修复播放偶发崩溃\", \"新增歌单同步\"], \"downloadUrl\": \"https://example.com/app-release.apk\", \"fileSize\": 28311552, \"fileHash\": \"sha256:xxxx\", \"publishedAt\": 1730000000 }'},
-    {group:'凭证管理',docKey:'doc-refresh',tip:'刷新凭证',path:'/api/credential/refresh',method:'POST',desc:'手动刷新凭证(force=true 强制刷新)',params:[{k:'force',v:'true'}],body:'{ "force": false }'},
+    {group:'凭证管理',docKey:'doc-refresh',tip:'刷新凭证',path:'/api/credential/refresh',method:'POST',desc:'手动刷新凭证(force 是 query 参数, body 可留空)',params:[{k:'force',v:'true'}]},
     {group:'用户管理',docKey:'doc-adminusers',tip:'用户列表/详情',path:'/api/admin/users',method:'GET',desc:'用户列表/详情(需 admin, action=list|detail; 含调用次数与APP打开统计)',params:[{k:'action',v:'list'},{k:'page',v:'1'},{k:'size',v:'20'}]},
     {group:'凭证管理',docKey:'doc-admincred',tip:'凭证状态(admin)',path:'/api/admin/credential',method:'GET',desc:'查看凭证完整状态(需 admin)',params:[]},
     {group:'系统维护',docKey:'doc-setup',tip:'站点初始化',path:'/api/setup',method:'GET',desc:'站点初始化状态(公开)',params:[]},
     {group:'用户系统',docKey:'doc-register',tip:'注册',path:'/api/user',method:'POST',desc:'注册账号(公开)',params:[{k:'action',v:'register'}],body:'{ "username":"test", "password":"123456", "deviceId":"abc123" }'},
-    {group:'用户系统',docKey:'doc-login',tip:'登录',path:'/api/user',method:'POST',desc:'登录(公开, 返回 token)',params:[{k:'action',v:'login'}],body:'{ "username":"test", "password":"123456" }'},
-    {group:'用户系统',docKey:'doc-logout',tip:'登出',path:'/api/user',method:'POST',desc:'登出(需 token)',params:[{k:'action',v:'logout'}],body:'{}'},
+    {group:'用户系统',docKey:'doc-login',tip:'登录',path:'/api/user',method:'POST',desc:'登录(公开, 返回 token, 必须带 deviceId)',params:[{k:'action',v:'login'}],body:'{ "username":"test", "password":"123456", "deviceId":"abc123" }'},
+    {group:'用户系统',docKey:'doc-logout',tip:'登出',path:'/api/user',method:'POST',desc:'登出当前 token 对应的会话(需 token, 由请求头 Authorization: Bearer 携带; body 无需字段)',params:[{k:'action',v:'logout'}],body:'{}'},
     {group:'用户系统',docKey:'doc-me',tip:'我的信息',path:'/api/user',method:'GET',desc:'当前用户信息与今日用量(需 token)',params:[{k:'action',v:'me'}]},
     {group:'用户系统',docKey:'doc-appopen',tip:'记录APP打开',path:'/api/user',method:'POST',desc:'记录一次 APP 打开(需 token, 用于统计)',params:[{k:'action',v:'appopen'}],body:'{}'},
     {group:'用户管理',docKey:'doc-adminusers',tip:'改用户等级',path:'/api/admin/users',method:'POST',desc:'修改用户等级(需 admin)',params:[{k:'action',v:'level'}],body:'{ "userId":2, "level":"vip" }'},
@@ -397,18 +397,18 @@ function generateConsoleHtml(totalCount) {
     {group:'用户管理',docKey:'doc-adminusers',tip:'更新用户',path:'/api/admin/users',method:'POST',desc:'部分更新用户(需 admin)',params:[{k:'action',v:'update'}],body:'{ "userId":2, "dailyLimit":100, "level":"vip" }'},
     {group:'用户管理',docKey:'doc-adminusers',tip:'用户详情',path:'/api/admin/users',method:'GET',desc:'单用户详情(需 admin)',params:[{k:'action',v:'detail'},{k:'userId',v:'2'}]},
     {group:'凭证管理',docKey:'doc-admincred',tip:'凭证更新(admin)',path:'/api/admin/credential',method:'POST',desc:'更新音乐凭证(需 admin)',params:[],body:'{ "musicid":"xxx", "musickey":"xxx" }'},
-    {group:'系统维护',docKey:'doc-setup',tip:'初始化站点',path:'/api/setup',method:'POST',desc:'站点初始化(公开, 仅未初始化时可用)',params:[],body:'{ "username":"admin", "password":"******" }'}
+    {group:'系统维护',docKey:'doc-setup',tip:'初始化-查看状态',path:'/api/setup',method:'GET',desc:'查看站点初始化状态(公开; 已初始化则返回锁定页)',params:[]},
+    {group:'系统维护',docKey:'doc-setup',tip:'初始化站点',path:'/api/setup',method:'POST',desc:'站点初始化(公开, 仅未初始化时可用; 会清空业务表并创建初始管理员, 高危操作)',params:[],body:'{ "username":"admin", "password":"******" }'},
   ];
   var DEFAULT_BODIES = {
-    '刷新凭证': { force: false },
     '注册': { username: "你的用户名(3-20位字母数字下划线)", password: "你的密码(至少6位)", deviceId: "设备唯一标识, 如 abc123" },
-    '登录': { username: "你的用户名", password: "你的密码" },
+    '登录': { username: "你的用户名", password: "你的密码(至少6位)", deviceId: "设备唯一标识(必填, 如 abc123)" },
     '登出': {},
     '记录APP打开': {},
-    '改用户等级': { userId: "目标用户ID(数字)", level: "vip 或 normal" },
-    '禁用/启用用户': { userId: "目标用户ID(数字)", status: "1 启用 / 0 禁用" },
-    '删除用户': { userId: "目标用户ID(数字)" },
-    '更新用户': { userId: "目标用户ID(数字)", username: "新用户名(可省)", password: "新密码(可省)", dailyLimit: "日限额(1-100000)", level: "vip 或 normal(可省)", status: "1 启用 / 0 禁用" },
+    '改用户等级': { userId: "目标用户ID(数字, 如 2)", level: "vip 或 normal" },
+    '禁用/启用用户': { userId: "目标用户ID(数字, 如 2)", status: "1 启用 / 0 禁用" },
+    '删除用户': { userId: "目标用户ID(数字, 如 2)" },
+    '更新用户': { userId: "目标用户ID(数字, 如 2)", username: "新用户名(可省)", password: "新密码(可省,至少6位)", dailyLimit: "日限额(1-100000)", level: "vip 或 normal(可省)", status: "1 启用 / 0 禁用(可省)" },
     '凭证更新(admin)': { openid: "你的OpenID", musicid: "你的QQ号", musickey: "你的MusicKey", refresh_token: "你的RefreshToken", login_type: 2, extra_fields: { musickeyCreateTime: 0, keyExpiresIn: 259200 } },
     '初始化站点': { username: "管理员用户名", password: "管理员密码(至少6位)" },
     '公告-写入/更新(调试)': { id: "notice_welcome", type: "popup", level: "info", title: "公告标题", content: "公告正文, 一眼看清要补什么", actionText: "知道了", actionUrl: "", forceShow: false, platforms: "android,ios", minVersion: "", maxVersion: "", channels: "", startAt: 0, endAt: 0, priority: 10, enabled: true },
@@ -509,6 +509,11 @@ function generateConsoleHtml(totalCount) {
     var api = APIS[sel.value];
     if(!api) return;
     var url = buildUrl();
+    // 高危操作二次确认(清库/改凭证/用户增删改)
+    if(api.method === 'POST'){
+      var risky = api.path === '/api/setup' || api.path === '/api/admin/credential' || api.path === '/api/admin/users';
+      if(risky && !confirm('即将执行高危操作: ' + api.method + ' ' + api.path + '\\n请确认你清楚其后果, 是否继续?')) { statusEl.textContent = '已取消'; return; }
+    }
     var opts = { method: api.method };
     var hdrs = {};
     var tk = localStorage.getItem('adminToken');
