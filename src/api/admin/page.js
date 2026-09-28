@@ -69,7 +69,6 @@ tr:hover{background:#222}
     <input id="search" placeholder="搜索用户名 / ID">
     <button id="load">加载</button>
     <button id="back" class="ghost">返回上一页</button>
-    <button id="setup" class="ghost">站点初始化</button>
     <button id="logout" class="ghost">登出</button>
   </div>
   <div id="status">请填入 Token 后加载</div>
@@ -248,7 +247,6 @@ document.getElementById('load').onclick = function(){ PAGE = 1; loadUsers(); };
 document.getElementById('prev').onclick = function(){ if(PAGE > 1){ PAGE--; loadUsers(); } };
 document.getElementById('next').onclick = function(){ PAGE++; loadUsers(); };
 document.getElementById('back').onclick = function(){ location.href = '/admin'; };
-document.getElementById('setup').onclick = function(){ location.href = '/api/setup'; };
 document.getElementById('logout').onclick = function(){
   var t = tokenEl.value.trim();
   var done = function(){ try{ localStorage.removeItem('adminToken'); }catch(e){} location.href = '/admin'; };

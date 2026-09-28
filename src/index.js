@@ -220,6 +220,13 @@ function generateConsoleHtml(totalCount) {
         .at-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
         .at-tools button{flex:1;min-width:80px;cursor:pointer;background:#2a2a2a;border:1px solid #444;color:#e0e0e0;border-radius:4px;padding:6px;font-size:.8rem}
         .at-tools button:hover{background:#333;border-color:#31c27c}
+        #at-endpoint{color:#4facfe;font-weight:600;letter-spacing:.2px}
+        #at-endpoint option{color:#e0e0e0;background:#181818}
+        .at-resp{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;font-size:.9rem!important;line-height:1.55}
+        .at-body-wrap2{position:relative;margin-bottom:8px}
+        .at-hl{position:absolute;inset:0;margin:0;padding:8px;background:#181818;border:1px solid #333;border-radius:4px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;overflow:auto;pointer-events:none;color:#e0e0e0;tab-size:2}
+        .at-body-ov{position:relative;z-index:2;background:transparent;color:transparent;caret-color:#31c27c;min-height:120px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;tab-size:2}
+        .jk{color:#4facfe}.js{color:#f0a020}.jn{color:#31c27c}.jb{color:#c678dd}
         #backTop{position:fixed;right:16px;bottom:16px;z-index:9999;width:44px;height:44px;border-radius:50%;background:#31c27c;color:#000;border:none;font-size:20px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;transition:transform .2s ease,opacity .2s ease;opacity:.95}
         @media (max-width:600px){ #backTop{right:12px;bottom:80px;width:42px;height:42px} }
         #backTop:hover{transform:translateY(-3px);opacity:1}
@@ -249,7 +256,12 @@ function generateConsoleHtml(totalCount) {
     var tk=localStorage.getItem('adminToken');
     if(tk){ fetch('/api/user?action=logout',{method:'POST',headers:{'Authorization':'Bearer '+tk,'X-Device-Id':getDeviceId()}}).catch(function(){}); }
     localStorage.removeItem('adminToken');
-    location.reload();
+    // 立即回到未登录态: 隐藏控制台内容, 重新显示登录门, 不离开本页
+    var c = document.querySelector('.c'); if(c){ c.style.display = 'none'; }
+    gate.style.display = 'flex';
+    setMsg('已退出登录', '#888');
+    var gu = document.getElementById('gUser'); if(gu){ gu.value = ''; }
+    var gp = document.getElementById('gPass'); if(gp){ gp.value = ''; }
   }
   function initConsole(){
     if(localStorage.getItem('adminToken')){ showConsole(); }
@@ -301,7 +313,10 @@ function generateConsoleHtml(totalCount) {
         <div id="at-params"></div>
         <div id="at-body-wrap" style="display:none">
             <div class="at-desc">POST Body (JSON)</div>
-            <textarea id="at-body" class="at-body"></textarea>
+            <div style="position:relative">
+                <pre id="at-body-hl" class="at-hl"></pre>
+                <textarea id="at-body" class="at-body at-body-ov"></textarea>
+            </div>
         </div>
         <div class="at-tools">
             <button id="at-reset">重置参数</button>
@@ -344,12 +359,12 @@ function generateConsoleHtml(totalCount) {
     <div class="e"><table><tr><th>等级</th><th>调用限制</th><th>说明</th></tr><tr><td><span class="tag tag-normal" style="padding:2px 8px;border-radius:4px;background:#333;color:#aaa">普通用户 normal</span></td><td>每日 50 次(可被管理员调整)</td><td>仅音乐业务类接口计入日限额, 超出返回 429</td></tr><tr><td><span class="tag tag-vip" style="padding:2px 8px;border-radius:4px;background:#f0a020;color:#000">VIP 用户 vip</span></td><td>无限制</td><td>不限调用次数</td></tr><tr><td><span class="tag" style="padding:2px 8px;border-radius:4px;background:#31c27c;color:#000">管理员 admin</span></td><td>无限制(日限额 100000)</td><td>可访问 /api/admin/* 管理接口</td></tr></table><p class="d">鉴权规则: 公开端点(无需 token)为 /api/user?action=register|login(注册/登录)、/api/setup(站点初始化)、/api/app/update(APP更新配置) 与 /api/app/notice(APP公告); 其余 /api/ 接口均需请求头 Authorization: Bearer 你的token; /api/admin/*(用户管理、凭证管理、APP配置调试)额外要求账号 role=admin。</p><p class="d">说明: 面向普通用户的读取凭证接口(/api/credential)已下线, 凭证仅可通过管理员接口查看/写入; 客户端探活请改用 /api/user?action=me 返回的 remaining 字段。</p></div>
     <h2>管理接口</h2>
     <h3>用户管理</h3>
-    <div class="e" id="doc-adminusers"><div class="h"><span class="m">GET</span><span class="p">/api/admin/users?action=list</span></div><p class="d">用户列表(需 admin)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 list</td></tr><tr><td><span class="pm">page</span></td><td>int</td><td>页码,默认 1</td></tr><tr><td><span class="pm">size</span></td><td>int</td><td>每页条数,默认 20,最大 100</td></tr></table><div class="ex">GET /api/admin/users?action=list&page=1&size=20Authorization: Bearer 管理员token</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">page</span></td><td>当前页码</td></tr><tr><td><span class="pm">size</span></td><td>本页条数</td></tr><tr><td><span class="pm">total</span></td><td>用户总数</td></tr><tr><td><span class="pm">list</span></td><td>用户数组(id/username/level/role/status/dailyLimit/createdAt)</td></tr></table></div>
-    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=level</span></div><p class="d">修改用户等级</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 level</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr><tr><td><span class="pm">level</span><span class="r">*</span></td><td>string</td><td>normal / vip</td></tr></table><div class="ex">POST /api/admin/users?action=level{ "userId":2, "level":"vip" }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">userId</span></td><td>被修改的用户ID</td></tr><tr><td><span class="pm">level</span></td><td>修改后的等级</td></tr></table></div>
-    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=status</span></div><p class="d">禁用/启用用户</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 status</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr><tr><td><span class="pm">status</span><span class="r">*</span></td><td>int</td><td>1启用 0禁用</td></tr></table><div class="ex">POST /api/admin/users?action=status{ "userId":2, "status":0 }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述(如 已启用/已禁用)</td></tr></table></div>
-    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=delete</span></div><p class="d">删除用户(级联清理会话与用量)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 delete</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr></table><div class="ex">POST /api/admin/users?action=delete{ "userId":2 }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">userId</span></td><td>被删除的用户ID</td></tr></table></div>
-    <div class="e"><div class="h"><span class="m">GET</span><span class="p">/api/admin/users?action=detail</span></div><p class="d">单个用户详情(含设备ID与时间戳, 需 admin)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 detail</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr></table><div class="ex">GET /api/admin/users?action=detail&userId=2</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">user.id</span></td><td>用户ID</td></tr><tr><td><span class="pm">user.username</span></td><td>用户名</td></tr><tr><td><span class="pm">user.level</span></td><td>等级 normal/vip</td></tr><tr><td><span class="pm">user.role</span></td><td>角色 user/admin</td></tr><tr><td><span class="pm">user.status</span></td><td>1启用 0禁用</td></tr><tr><td><span class="pm">user.dailyLimit</span></td><td>日调用限额</td></tr><tr><td><span class="pm">user.deviceId</span></td><td>注册设备标识</td></tr><tr><td><span class="pm">user.createdAt</span></td><td>注册时间戳(秒)</td></tr><tr><td><span class="pm">user.updatedAt</span></td><td>最后更新时间戳(秒)</td></tr><tr><td><span class="pm">apiUsage.today</span></td><td>今日 API 调用次数</td></tr><tr><td><span class="pm">apiUsage.total</span></td><td>累计 API 调用次数</td></tr><tr><td><span class="pm">appOpen.today</span></td><td>今日 APP 打开次数</td></tr><tr><td><span class="pm">appOpen.total</span></td><td>累计 APP 打开次数</td></tr></table></div>
-    <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=update</span></div><p class="d">部分更新用户(改密强制下线)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 update</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr><tr><td><span class="pm">username</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span></td><td>string</td><td>至少 6 位,改后强制下线</td></tr><tr><td><span class="pm">dailyLimit</span></td><td>int</td><td>1-100000</td></tr><tr><td><span class="pm">level</span></td><td>string</td><td>normal / vip</td></tr><tr><td><span class="pm">status</span></td><td>int</td><td>1启用 0禁用</td></tr></table><div class="ex">POST /api/admin/users?action=update{ "userId":2, "dailyLimit":100, "level":"vip" }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">user</span></td><td>更新后的完整用户信息</td></tr></table></div>
+    <div class="e" id="doc-adminusers-list"><div class="h"><span class="m">GET</span><span class="p">/api/admin/users?action=list</span></div><p class="d">用户列表(需 admin)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 list</td></tr><tr><td><span class="pm">page</span></td><td>int</td><td>页码,默认 1</td></tr><tr><td><span class="pm">size</span></td><td>int</td><td>每页条数,默认 20,最大 100</td></tr></table><div class="ex">GET /api/admin/users?action=list&page=1&size=20Authorization: Bearer 管理员token</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">page</span></td><td>当前页码</td></tr><tr><td><span class="pm">size</span></td><td>本页条数</td></tr><tr><td><span class="pm">total</span></td><td>用户总数</td></tr><tr><td><span class="pm">list</span></td><td>用户数组(id/username/level/role/status/dailyLimit/createdAt)</td></tr></table></div>
+    <div class="e" id="doc-adminusers-level"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=level</span></div><p class="d">修改用户等级</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 level</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr><tr><td><span class="pm">level</span><span class="r">*</span></td><td>string</td><td>normal / vip</td></tr></table><div class="ex">POST /api/admin/users?action=level{ "userId":2, "level":"vip" }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">userId</span></td><td>被修改的用户ID</td></tr><tr><td><span class="pm">level</span></td><td>修改后的等级</td></tr></table></div>
+    <div class="e" id="doc-adminusers-status"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=status</span></div><p class="d">禁用/启用用户</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 status</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr><tr><td><span class="pm">status</span><span class="r">*</span></td><td>int</td><td>1启用 0禁用</td></tr></table><div class="ex">POST /api/admin/users?action=status{ "userId":2, "status":0 }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述(如 已启用/已禁用)</td></tr></table></div>
+    <div class="e" id="doc-adminusers-delete"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=delete</span></div><p class="d">删除用户(级联清理会话与用量)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 delete</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr></table><div class="ex">POST /api/admin/users?action=delete{ "userId":2 }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">userId</span></td><td>被删除的用户ID</td></tr></table></div>
+    <div class="e" id="doc-adminusers-detail"><div class="h"><span class="m">GET</span><span class="p">/api/admin/users?action=detail</span></div><p class="d">单个用户详情(含设备ID与时间戳, 需 admin)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 detail</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr></table><div class="ex">GET /api/admin/users?action=detail&userId=2</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">user.id</span></td><td>用户ID</td></tr><tr><td><span class="pm">user.username</span></td><td>用户名</td></tr><tr><td><span class="pm">user.level</span></td><td>等级 normal/vip</td></tr><tr><td><span class="pm">user.role</span></td><td>角色 user/admin</td></tr><tr><td><span class="pm">user.status</span></td><td>1启用 0禁用</td></tr><tr><td><span class="pm">user.dailyLimit</span></td><td>日调用限额</td></tr><tr><td><span class="pm">user.deviceId</span></td><td>注册设备标识</td></tr><tr><td><span class="pm">user.createdAt</span></td><td>注册时间戳(秒)</td></tr><tr><td><span class="pm">user.updatedAt</span></td><td>最后更新时间戳(秒)</td></tr><tr><td><span class="pm">apiUsage.today</span></td><td>今日 API 调用次数</td></tr><tr><td><span class="pm">apiUsage.total</span></td><td>累计 API 调用次数</td></tr><tr><td><span class="pm">appOpen.today</span></td><td>今日 APP 打开次数</td></tr><tr><td><span class="pm">appOpen.total</span></td><td>累计 APP 打开次数</td></tr></table></div>
+    <div class="e" id="doc-adminusers-update"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=update</span></div><p class="d">部分更新用户(改密强制下线)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 update</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr><tr><td><span class="pm">username</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span></td><td>string</td><td>至少 6 位,改后强制下线</td></tr><tr><td><span class="pm">dailyLimit</span></td><td>int</td><td>1-100000</td></tr><tr><td><span class="pm">level</span></td><td>string</td><td>normal / vip</td></tr><tr><td><span class="pm">status</span></td><td>int</td><td>1启用 0禁用</td></tr></table><div class="ex">POST /api/admin/users?action=update{ "userId":2, "dailyLimit":100, "level":"vip" }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">user</span></td><td>更新后的完整用户信息</td></tr></table></div>
     <h3>凭证管理</h3>
     <div class="e" id="doc-admincred"><div class="h"><span class="m">GET</span><span class="p">/api/admin/credential</span></div><p class="d">查看凭证完整状态(需 admin, 不脱敏)</p><div class="ex">GET /api/admin/credential</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">credential</span></td><td>完整凭证对象(musicid/musickey/refresh_token/openid 等字段, 已剔除 refresh_key); 无凭证时为 null</td></tr></table></div>
     <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/credential</span></div><p class="d">更新 QQ 音乐凭证(需 admin)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">musicid</span><span class="r">*</span></td><td>string</td><td>音乐账号ID</td></tr><tr><td><span class="pm">musickey</span><span class="r">*</span></td><td>string</td><td>音乐密钥</td></tr><tr><td><span class="pm">credential</span></td><td>object</td><td>也可整体包在 credential 字段里</td></tr></table><div class="ex">POST /api/admin/credential{ "musicid":"xxx", "musickey":"xxx" }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">success</span></td><td>true 表示写入成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">musicid</span></td><td>已保存的音乐账号ID</td></tr></table></div>
@@ -383,7 +398,7 @@ function generateConsoleHtml(totalCount) {
     {group:'APP 配置',docKey:'doc-appupdate',tip:'更新-读取(调试)',path:'/api/admin/appconfig',method:'GET',desc:'读取已配置的版本更新(需 admin)',params:[{k:'type',v:'update'}]},
     {group:'APP 配置',docKey:'doc-appupdate',tip:'更新-写入/更新(调试)',path:'/api/admin/appconfig',method:'POST',desc:'新增或修改版本更新,platform+channel 覆盖(需 admin)',params:[{k:'type',v:'update'}],body:'{ \"platform\": \"android\", \"channel\": \"official\", \"latestVersion\": \"1.3.0\", \"latestBuild\": 130, \"minSupportBuild\": 100, \"title\": \"发现新版本\", \"changelog\": [\"修复播放偶发崩溃\", \"新增歌单同步\"], \"downloadUrl\": \"https://example.com/app-release.apk\", \"fileSize\": 28311552, \"fileHash\": \"sha256:xxxx\", \"publishedAt\": 1730000000 }'},
     {group:'凭证管理',docKey:'doc-refresh',tip:'刷新凭证',path:'/api/credential/refresh',method:'POST',desc:'手动刷新凭证(force 是 query 参数, body 可留空)',params:[{k:'force',v:'true'}]},
-    {group:'用户管理',docKey:'doc-adminusers',tip:'用户列表/详情',path:'/api/admin/users',method:'GET',desc:'用户列表/详情(需 admin, action=list|detail; 含调用次数与APP打开统计)',params:[{k:'action',v:'list'},{k:'page',v:'1'},{k:'size',v:'20'}]},
+    {group:'用户管理',docKey:'doc-adminusers',tip:'用户列表/详情',docKey:'doc-adminusers-list',path:'/api/admin/users',method:'GET',desc:'用户列表/详情(需 admin, action=list|detail; 含调用次数与APP打开统计)',params:[{k:'action',v:'list'},{k:'page',v:'1'},{k:'size',v:'20'}]},
     {group:'凭证管理',docKey:'doc-admincred',tip:'凭证状态(admin)',path:'/api/admin/credential',method:'GET',desc:'查看凭证完整状态(需 admin)',params:[]},
     {group:'系统维护',docKey:'doc-setup',tip:'站点初始化',path:'/api/setup',method:'GET',desc:'站点初始化状态(公开)',params:[]},
     {group:'用户系统',docKey:'doc-register',tip:'注册',path:'/api/user',method:'POST',desc:'注册账号(公开)',params:[{k:'action',v:'register'}],body:'{ "username":"test", "password":"123456", "deviceId":"abc123" }'},
@@ -391,11 +406,11 @@ function generateConsoleHtml(totalCount) {
     {group:'用户系统',docKey:'doc-logout',tip:'登出',path:'/api/user',method:'POST',desc:'登出当前 token 对应的会话(需 token, 由请求头 Authorization: Bearer 携带; body 无需字段)',params:[{k:'action',v:'logout'}],body:'{}'},
     {group:'用户系统',docKey:'doc-me',tip:'我的信息',path:'/api/user',method:'GET',desc:'当前用户信息与今日用量(需 token)',params:[{k:'action',v:'me'}]},
     {group:'用户系统',docKey:'doc-appopen',tip:'记录APP打开',path:'/api/user',method:'POST',desc:'记录一次 APP 打开(需 token, 用于统计)',params:[{k:'action',v:'appopen'}],body:'{}'},
-    {group:'用户管理',docKey:'doc-adminusers',tip:'改用户等级',path:'/api/admin/users',method:'POST',desc:'修改用户等级(需 admin)',params:[{k:'action',v:'level'}],body:'{ "userId":2, "level":"vip" }'},
-    {group:'用户管理',docKey:'doc-adminusers',tip:'禁用/启用用户',path:'/api/admin/users',method:'POST',desc:'禁用/启用用户(需 admin)',params:[{k:'action',v:'status'}],body:'{ "userId":2, "status":0 }'},
-    {group:'用户管理',docKey:'doc-adminusers',tip:'删除用户',path:'/api/admin/users',method:'POST',desc:'删除用户(需 admin)',params:[{k:'action',v:'delete'}],body:'{ "userId":2 }'},
-    {group:'用户管理',docKey:'doc-adminusers',tip:'更新用户',path:'/api/admin/users',method:'POST',desc:'部分更新用户(需 admin)',params:[{k:'action',v:'update'}],body:'{ "userId":2, "dailyLimit":100, "level":"vip" }'},
-    {group:'用户管理',docKey:'doc-adminusers',tip:'用户详情',path:'/api/admin/users',method:'GET',desc:'单用户详情(需 admin)',params:[{k:'action',v:'detail'},{k:'userId',v:'2'}]},
+    {group:'用户管理',docKey:'doc-adminusers-level',tip:'改用户等级',path:'/api/admin/users',method:'POST',desc:'修改用户等级(需 admin)',params:[{k:'action',v:'level'}],body:'{ "userId":2, "level":"vip" }'},
+    {group:'用户管理',docKey:'doc-adminusers-status',tip:'禁用/启用用户',path:'/api/admin/users',method:'POST',desc:'禁用/启用用户(需 admin)',params:[{k:'action',v:'status'}],body:'{ "userId":2, "status":0 }'},
+    {group:'用户管理',docKey:'doc-adminusers-delete',tip:'删除用户',path:'/api/admin/users',method:'POST',desc:'删除用户(需 admin)',params:[{k:'action',v:'delete'}],body:'{ "userId":2 }'},
+    {group:'用户管理',docKey:'doc-adminusers-update',tip:'更新用户',path:'/api/admin/users',method:'POST',desc:'部分更新用户(需 admin)',params:[{k:'action',v:'update'}],body:'{ "userId":2, "dailyLimit":100, "level":"vip" }'},
+    {group:'用户管理',docKey:'doc-adminusers-detail',tip:'用户详情',path:'/api/admin/users',method:'GET',desc:'单用户详情(需 admin)',params:[{k:'action',v:'detail'},{k:'userId',v:'2'}]},
     {group:'凭证管理',docKey:'doc-admincred',tip:'凭证更新(admin)',path:'/api/admin/credential',method:'POST',desc:'更新音乐凭证(需 admin)',params:[],body:'{ "musicid":"xxx", "musickey":"xxx" }'},
     {group:'系统维护',docKey:'doc-setup',tip:'初始化-查看状态',path:'/api/setup',method:'GET',desc:'查看站点初始化状态(公开; 已初始化则返回锁定页)',params:[]},
     {group:'系统维护',docKey:'doc-setup',tip:'初始化站点',path:'/api/setup',method:'POST',desc:'站点初始化(公开, 仅未初始化时可用; 会清空业务表并创建初始管理员, 高危操作)',params:[],body:'{ "username":"admin", "password":"******" }'},
@@ -436,6 +451,7 @@ function generateConsoleHtml(totalCount) {
     if(api.method === 'POST'){
       var v = (DEFAULT_BODIES[api.tip] != null) ? DEFAULT_BODIES[api.tip] : api.body;
       bodyBox.value = prettyBody(v);
+      syncBodyHl();
     }
   }
   var NL = String.fromCharCode(10);
@@ -447,6 +463,10 @@ function generateConsoleHtml(totalCount) {
   var statusEl = document.getElementById('at-status');
   var bodyWrap = document.getElementById('at-body-wrap');
   var bodyBox = document.getElementById('at-body');
+  var bodyHl = document.getElementById('at-body-hl');
+  function syncBodyHl(){ if(bodyHl){ bodyHl.innerHTML = hlJson(bodyBox.value || '') + NL; } }
+  bodyBox.addEventListener('input', syncBodyHl);
+  bodyBox.addEventListener('scroll', function(){ if(bodyHl){ bodyHl.scrollTop = bodyBox.scrollTop; bodyHl.scrollLeft = bodyBox.scrollLeft; } });
   var docMap = {};
   APIS.forEach(function(a){ if(a.group && a.docKey && !docMap[a.docKey]) docMap[a.docKey] = a.docKey; });
   var ogMap = {};
@@ -463,6 +483,17 @@ function generateConsoleHtml(totalCount) {
     ogMap[g].appendChild(o);
   });
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/\u003c/g,'&lt;').replace(/>/g,'&gt;'); }
+  function jesc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function hlJson(txt){
+    var s = jesc(String(txt));
+    var re = /("(?:[^"\\]|\\.)*"\s*:)|("(?:[^"\\]|\\.)*")|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+    return s.replace(re, function(m,a,b,c){
+      if(a) return '<span class="jk">'+m+'</span>';
+      if(b) return '<span class="js">'+m+'</span>';
+      if(c) return '<span class="jb">'+m+'</span>';
+      return '<span class="jn">'+m+'</span>';
+    });
+  }
   function copy(t){
     if(navigator.clipboard){ navigator.clipboard.writeText(t); }
     else { var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
@@ -512,7 +543,7 @@ function generateConsoleHtml(totalCount) {
     // 高危操作二次确认(清库/改凭证/用户增删改)
     if(api.method === 'POST'){
       var risky = api.path === '/api/setup' || api.path === '/api/admin/credential' || api.path === '/api/admin/users';
-      if(risky && !confirm('即将执行高危操作: ' + api.method + ' ' + api.path + '\\n请确认你清楚其后果, 是否继续?')) { statusEl.textContent = '已取消'; return; }
+      if(risky && !confirm('即将执行高危操作: ' + api.method + ' ' + api.path + ' —— 此操作可能修改或清空数据, 是否继续?')) { statusEl.textContent = '已取消'; return; }
     }
     var opts = { method: api.method };
     var hdrs = {};
@@ -536,7 +567,7 @@ function generateConsoleHtml(totalCount) {
       statusEl.innerHTML = '\u003cspan class="' + (res.ok ? 'ok' : 'err') + '"\u003eHTTP ' + res.status + '\u003c/span\u003e · ' + ms + 'ms · ' + api.method + ' ' + esc(url);
       var out = res.txt;
       try { out = JSON.stringify(JSON.parse(res.txt), null, 2); } catch(e){}
-      resp.textContent = api.method + ' ' + url + NL + 'HTTP ' + res.status + ' · ' + ms + 'ms' + NL + NL + out;
+      resp.innerHTML = jesc(api.method + ' ' + url + NL + 'HTTP ' + res.status + ' · ' + ms + 'ms' + NL + NL) + hlJson(out);
     }).catch(function(e){
       var ms = Date.now() - t0;
       statusEl.innerHTML = '\u003cspan class="err"\u003e请求失败\u003c/span\u003e · ' + ms + 'ms';
