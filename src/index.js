@@ -22,14 +22,17 @@ import * as userApi from "./api/user.js";
 import * as adminUsers from "./api/admin/users.js";
 import * as adminPage from "./api/admin/page.js";
 import * as adminCache from "./api/admin/cache.js";
+import * as adminRisk from "./api/admin/risk.js";
 import * as setup from "./api/setup.js";
 import { ensureStatsTable, incrementCount, getTotalCount, getAllStats } from "./lib/stats.js";
 import { ensureUserTables, verifySession, reserveUsage, releaseUsage, countUsage, checkIpRate, VIP_DAILY_LIMIT } from "./lib/user.js";
+import { ensureRiskTables, inspectRequest, logRiskEvent } from "./lib/risk.js";
+import { verifyRequestSignature, getReqSignEnabled } from "./lib/reqsign.js";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Device-Id",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Device-Id, X-Req-Sign, X-Req-Ts, X-Req-Nonce",
 };
 
 /**
@@ -54,14 +57,16 @@ const routes = {
     "/api/admin/credential": adminCredential,
     "/api/admin/appconfig": adminAppConfig,
     "/api/admin/cache": adminCache,
+    "/api/admin/risk": adminRisk,
+    "/admin/risk": adminRisk,
     "/api/setup": setup,
 };
 
 // 免鉴权的公开路由(register/login 额外豁免)
 // /admin 是控制台页面, 前端密码登录; /admin/users 复用同一 token
-const PUBLIC_ROUTES = ["/admin", "/admin/users", "/admin/cache", "/api/setup", "/api/app/update", "/api/app/notice", "/api/search", "/api/top"];
+const PUBLIC_ROUTES = ["/admin", "/admin/users", "/admin/cache", "/admin/risk", "/api/setup", "/api/app/update", "/api/app/notice", "/api/search", "/api/top"];
 // 需 admin 角色的数据接口(登录后仍要校验角色, 统一以 [admin] 前缀标注)
-const ADMIN_ROUTES = ["/api/admin/users", "/api/admin/credential", "/api/admin/appconfig", "/api/admin/cache"];
+const ADMIN_ROUTES = ["/api/admin/users", "/api/admin/credential", "/api/admin/appconfig", "/api/admin/cache", "/api/admin/risk"];
 
 // 需要统计的 API 端点
 const statsEndpoints = [
@@ -105,7 +110,7 @@ async function generateIndexHtml(env) {
         ['/api/album', '获取专辑详情'],
         ['/api/playlist', '获取歌单详情'],
         ['/api/singer', '获取歌手信息'],
-        ['/api/top', '获取排行榜'],
+        ['/api/top', '获取排行榜 (公开, IP 限流)'],
         ['/api/app/update', 'APP 更新配置'],
         ['/api/app/notice', 'APP 公告']
     ];
@@ -323,6 +328,7 @@ function generateConsoleHtml(totalCount) {
     <div style="margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap">
         <a href="/admin/users" style="display:inline-block;background:#31c27c;color:#000;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none">👥 用户管理</a>
         <a href="/admin/cache" style="display:inline-block;background:#4ec9b0;color:#000;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none">🗃 缓存列表</a>
+        <a href="/admin/risk" style="display:inline-block;background:#f0a020;color:#000;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none">🛡 风控防护</a>
         <a href="/" style="display:inline-block;background:#2a2a2a;border:1px solid #444;color:#e0e0e0;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none">🏠 网站首页</a>
         <button id="adminLogout" style="background:#2a2a2a;border:1px solid #444;color:#e0e0e0;font-weight:600;padding:10px 20px;border-radius:6px;cursor:pointer">🚪 退出登录</button>
     </div>
@@ -695,6 +701,16 @@ export default {
             });
         }
 
+        // 风控防护页(前端自行带 token 调 /api/admin/risk)
+        if (path === "/admin/risk") {
+            return new Response(adminRisk.renderPage(), {
+                headers: {
+                    "Content-Type": "text/html; charset=utf-8",
+                    ...corsHeaders,
+                },
+            });
+        }
+
         // API 路由
         const handler = routes[path];
         if (handler && handler.onRequest) {
@@ -771,6 +787,61 @@ export default {
                         // 管理员: 不限流, 但一样计入调用统计; 业务失败不回滚
                         try { await countUsage(env.DB, currentUser.id); } catch (e) { console.error("计数失败:", e); }
                     }
+                }
+            }
+
+            // ---------- 请求签名 + 行为风控 (仅私有业务端点) ----------
+            // 不拦公开端点/认证端点/管理端, 避免把初始化与后台打挂。
+            if (env.DB && !isPublic && !isAuthAction && currentUser) {
+                try {
+                    await ensureRiskTables(env.DB);
+                    const riskIp = (request.headers.get("CF-Connecting-IP")
+                        || (request.headers.get("X-Forwarded-For") || "").split(",")[0].trim()
+                        || "unknown");
+                    const subject = "user:" + currentUser.id;
+                    const riskUrl = new URL(request.url);
+
+                    // 1) 请求签名校验(可选, 后台开关控制; 未配 REQUEST_SECRET 时自动跳过)
+                    const signOn = await getReqSignEnabled(env.DB);
+                    if (signOn && env.REQUEST_SECRET) {
+                        const vr = await verifyRequestSignature(request, env.REQUEST_SECRET, env.DB);
+                        if (!vr.ok) {
+                            await logRiskEvent(env.DB, subject, "bad_sign", (vr.code || "") + ": " + (vr.message || ""));
+                            return new Response(JSON.stringify({
+                                error: "请求签名校验失败",
+                                code: vr.code,
+                                detail: vr.message,
+                            }), {
+                                status: 403,
+                                headers: { "Content-Type": "application/json", ...corsHeaders },
+                            });
+                        }
+                    }
+
+                    // 2) 行为风控: 频次突增 + MID 遍历识别
+                    let riskMids = [];
+                    const midParam = riskUrl.searchParams.get("mid");
+                    if (midParam) {
+                        riskMids = midParam.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+                    }
+                    const verdict = await inspectRequest(env.DB, subject, path, riskMids);
+                    if (verdict.action === "block") {
+                        return new Response(JSON.stringify({
+                            error: "请求已被风控拦截",
+                            reason: verdict.reason,
+                            retryAfter: verdict.remain || 0,
+                        }), {
+                            status: 429,
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Retry-After": String(verdict.remain || 0),
+                                ...corsHeaders,
+                            },
+                        });
+                    }
+                } catch (e) {
+                    // 风控故障不影响主流程
+                    console.error("[Risk] 风控检查异常(已放行):", e);
                 }
             }
 

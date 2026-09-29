@@ -432,21 +432,45 @@ export async function listUsers(db, page = 1, size = 20, keyword = "") {
         }
     }
     const total = await db.prepare(`SELECT COUNT(*) AS c FROM users u ${whereSql}`).bind(...whereBinds).first();
-    const rowSql = `SELECT u.*,
-        (SELECT COUNT FROM usage_daily WHERE user_id = u.id AND date = ?) AS api_today,
-        (SELECT COALESCE(SUM(count),0) FROM usage_daily WHERE user_id = u.id) AS api_total,
-        (SELECT COUNT FROM app_open_daily WHERE user_id = u.id AND date = ?) AS open_today,
-        (SELECT COALESCE(SUM(count),0) FROM app_open_daily WHERE user_id = u.id) AS open_total
-        FROM users u ${whereSql} ORDER BY u.id DESC LIMIT ? OFFSET ?`;
-    const rows = await db.prepare(rowSql).bind(today, today, ...whereBinds, size, offset).all();
+
+    // 1. 先只查 users 分页 (不再对每行跑 4 个相关子查询)
+    const rows = await db.prepare(
+        `SELECT u.* FROM users u ${whereSql} ORDER BY u.id DESC LIMIT ? OFFSET ?`
+    ).bind(...whereBinds, size, offset).all();
+    const userList = rows.results || [];
+
+    // 2. 对本页用户批量聚合用量: 一次 IN 查询替代 4×N 次子查询, 与页大小无关
+    const usageMap = {};
+    const openMap = {};
+    const ids = userList.map(function(u){ return u.id; });
+    if (ids.length > 0) {
+        const ph = ids.map(function(){ return "?"; }).join(",");
+        const ud = await db.prepare(
+            `SELECT user_id, SUM(CASE WHEN date = ? THEN count ELSE 0 END) AS today,
+                SUM(count) AS total FROM usage_daily WHERE user_id IN (${ph}) GROUP BY user_id`
+        ).bind(today, ...ids).all();
+        for (const r of (ud.results || [])) {
+            usageMap[r.user_id] = { today: r.today || 0, total: r.total || 0 };
+        }
+        const ao = await db.prepare(
+            `SELECT user_id, SUM(CASE WHEN date = ? THEN count ELSE 0 END) AS today,
+                SUM(count) AS total FROM app_open_daily WHERE user_id IN (${ph}) GROUP BY user_id`
+        ).bind(today, ...ids).all();
+        for (const r of (ao.results || [])) {
+            openMap[r.user_id] = { today: r.today || 0, total: r.total || 0 };
+        }
+    }
+
     return {
         total: total ? total.c : 0,
-        list: (rows.results || []).map(function(u){
+        list: userList.map(function(u){
+            const ud = usageMap[u.id] || { today: 0, total: 0 };
+            const ao = openMap[u.id] || { today: 0, total: 0 };
             return Object.assign(publicUser(u), {
-                apiToday: u.api_today || 0,
-                apiTotal: u.api_total || 0,
-                appOpenToday: u.open_today || 0,
-                appOpenTotal: u.open_total || 0,
+                apiToday: ud.today,
+                apiTotal: ud.total,
+                appOpenToday: ao.today,
+                appOpenTotal: ao.total,
             });
         }),
     };

@@ -2,17 +2,22 @@
  * API 调用统计
  */
 
+// 建表只跑一次: index.js 每个请求都调它, 不幂等会白耗一次 DDL 往返
+let _statsEnsured = false;
+
 /**
  * 确保统计表存在
  * @param {D1Database} db 
  */
 export async function ensureStatsTable(db) {
+    if (_statsEnsured) return;
     await db.prepare(`
         CREATE TABLE IF NOT EXISTS api_stats (
             endpoint TEXT PRIMARY KEY,
             count INTEGER DEFAULT 0
         )
     `).run();
+    _statsEnsured = true;
 }
 
 /**

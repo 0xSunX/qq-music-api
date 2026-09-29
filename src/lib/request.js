@@ -157,7 +157,7 @@ export async function batchRequest(requests, credential = null) {
 export const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Device-Id, X-Req-Sign, X-Req-Ts, X-Req-Nonce",
 };
 
 /**

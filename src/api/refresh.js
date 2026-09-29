@@ -16,6 +16,8 @@ import { API_CONFIG } from "../lib/common.js";
 import { ensureUrlCacheTable } from "../lib/urlcache.js";
 import { cleanStaleRegisterRate, cleanStaleIpRate, cleanStaleLoginRate } from "../lib/user.js";
 import { cleanStaleDeviceRegistry } from "../lib/device.js";
+import { cleanStaleRisk } from "../lib/risk.js";
+import { cleanStaleNonce } from "../lib/reqsign.js";
 
 /**
  * 刷新凭证
@@ -200,6 +202,22 @@ export async function onSchedule(context) {
         console.log(`[Cron] 已清理 ${removedDev} 条过期设备登记记录`);
     } catch (err) {
         console.error("[Cron] 清理设备登记记录失败:", err);
+    }
+
+    // 清理陈旧风控事件 / MID 记录 / 限速窗口 / 过期封禁
+    try {
+        await cleanStaleRisk(env.DB, 7);
+        console.log("[Cron] 已清理陈旧风控记录");
+    } catch (err) {
+        console.error("[Cron] 清理风控记录失败:", err);
+    }
+
+    // 清理过期请求签名 nonce
+    try {
+        await cleanStaleNonce(env.DB, 24);
+        console.log("[Cron] 已清理过期请求签名 nonce");
+    } catch (err) {
+        console.error("[Cron] 清理请求签名 nonce 失败:", err);
     }
 }
 

@@ -3,9 +3,10 @@
  * GET /api/song/url?mid=xxx&quality=flac
  */
 
-import { batchRequest, jsonResponse, errorResponse, handleOptions } from "../../lib/request.js";
-import { getGuid, parseQuality, SongFileType } from "../../lib/common.js";
+import { batchRequest, jsonResponse, errorResponse, handleOptions, buildCookies } from "../../lib/request.js";
+import { getGuid, parseQuality, SongFileType, API_CONFIG } from "../../lib/common.js";
 import { getCredential } from "../../lib/credential.js";
+import { generateSign } from "../../lib/sign.js";
 import { ensureUrlCacheTable, getCachedUrls, saveCachedUrl, validateUrl, recordCacheHit, recordCacheMiss } from "../../lib/urlcache.js";
 
 /**
@@ -14,7 +15,7 @@ import { ensureUrlCacheTable, getCachedUrls, saveCachedUrl, validateUrl, recordC
 const QUALITY_FALLBACK = ["master", "atmos_2", "atmos_51", "flac", "320", "128"];
 
 export async function onRequest(context) {
-    const { request, env } = context;
+    const { request, env, ctx } = context;
 
     if (request.method === "OPTIONS") {
         return handleOptions();
@@ -56,30 +57,47 @@ export async function onRequest(context) {
                 const hitMids = [];
                 let hits = 0, misses = 0;
                 // 并行处理每个 mid: 新鲜的直接信, 老的才校验
-                const decisions = await Promise.all(mids.map(async function(mid){
+                // 先分流: 新鲜(30分钟内)的直接信, 只有老年限的才需要外网探活
+                const freshHits = [];
+                const staleCheck = [];
+                for (const mid of mids) {
                     const c = cached[mid];
-                    if (!c || !c.url) return { mid: mid, ok: false };
+                    if (!c || !c.url) { staleCheck.push({ mid: mid, c: null }); continue; }
                     const age = now - (c.createdAt || 0);
-                    if (age < FRESH_SECONDS) {
-                        return { mid: mid, ok: true, url: c.url, quality: c.quality };
-                    }
-                    const ok = await validateUrl(c.url);
-                    return { mid: mid, ok: ok, url: c.url, quality: c.quality };
+                    if (age < FRESH_SECONDS) { freshHits.push({ mid: mid, c: c }); }
+                    else { staleCheck.push({ mid: mid, c: c }); }
+                }
+                // 仅对老年限链接并行探活, 新鲜链接零外网开销
+                const probed = await Promise.all(staleCheck.map(async function(item){
+                    if (!item.c) return { mid: item.mid, ok: false };
+                    const ok = await validateUrl(item.c.url);
+                    return { mid: item.mid, ok: ok, url: item.c.url, quality: item.c.quality };
                 }));
+                const decisions = freshHits.map(function(item){
+                    return { mid: item.mid, ok: true, url: item.c.url, quality: item.c.quality };
+                }).concat(probed);
                 for (const d of decisions) {
                     if (d.ok) {
                         urls[d.mid] = d.url;
-                        actualQuality = d.quality || actualQuality;
+                        if (d.quality) actualQuality = d.quality;
                         hitMids.push(d.mid);
                         hits++;
                     } else {
                         misses++;
                     }
                 }
-                if (hits) { try { await recordCacheHit(env.DB, hits); } catch (e) {} }
-                if (misses) { try { await recordCacheMiss(env.DB, misses); } catch (e) {} }
+                if (hits || misses) {
+                    // 命中率统计非业务必需: 有 ctx 则丢给 waitUntil 异步写, 不阻塞响应; 无 ctx 才兜底 await
+                    const statsJob = (async () => {
+                        if (hits) { try { await recordCacheHit(env.DB, hits); } catch (e) {} }
+                        if (misses) { try { await recordCacheMiss(env.DB, misses); } catch (e) {} }
+                    })();
+                    if (ctx && ctx.waitUntil) { try { ctx.waitUntil(statsJob); } catch (e) { await statsJob; } }
+                    else { await statsJob; }
+                }
                 if (hitMids.length) {
-                    pendingMids = mids.filter(function(m){ return hitMids.indexOf(m) < 0; });
+                    const hitSet = new Set(hitMids);
+                    pendingMids = mids.filter(function(m){ return !hitSet.has(m); });
                 }
                 if (pendingMids.length === 0) {
                     // 全部命中且校验通过, 直接返回, 不打上游
@@ -93,10 +111,6 @@ export async function onRequest(context) {
 
         const credential = await getCredential(env);
         const domain = "https://isure.stream.qqmusic.qq.com/";
-
-        const { generateSign } = await import("../../lib/sign.js");
-        const { API_CONFIG } = await import("../../lib/common.js");
-        const { buildCookies } = await import("../../lib/request.js");
 
         // 构建降级队列：从请求的音质开始
         const startIndex = QUALITY_FALLBACK.indexOf(requestedQuality.toLowerCase());

@@ -5,6 +5,51 @@
  *       链接本身有时效性, 用"请求时校验"代替"定时清理"。
  */
 
+// ---------- isolate 内存缓存层 ----------
+// 命中查询是最高频热路径: 加一层内存缓存, 命中时零 D1 查表。
+// 内存条目 TTL 60 秒, 过期回源 D1 并回填; 写入/删除同步更新, 保证一致性。
+// 长度上限防内存膨胀, 超限整体清空(简单且够用, 缓存本身可重建)。
+const _memCache = new Map();
+const MEM_TTL_MS = 60000;
+const MEM_MAX = 5000;
+
+// 内存层命中/未命中计数 (isolate 级, 重启归零)
+// 用于后台直观看到内存层省了多少次 D1 查表
+let _memHits = 0;
+let _memMisses = 0;
+
+function memGet(cacheKey) {
+    const m = _memCache.get(cacheKey);
+    if (!m) return null;
+    if ((Date.now() - m.cachedAt) >= MEM_TTL_MS) { _memCache.delete(cacheKey); return null; }
+    return m;
+}
+
+function memSet(cacheKey, url, quality, createdAt) {
+    if (_memCache.size >= MEM_MAX) _memCache.clear();
+    _memCache.set(cacheKey, { url: url, quality: quality, createdAt: createdAt, cachedAt: Date.now() });
+}
+
+function memDel(cacheKey) { _memCache.delete(cacheKey); }
+
+/** 管理端改动缓存后调用, 强制内存层失效 */
+export function invalidateMemCache() { _memCache.clear(); }
+
+/** 内存层统计 (isolate 级): 命中次数 / 未命中次数 / 当前条目数 / 命中率 */
+export function getMemStats() {
+    const total = _memHits + _memMisses;
+    return {
+        hits: _memHits,
+        misses: _memMisses,
+        total: total,
+        size: _memCache.size,
+        hitRate: total > 0 ? Math.round((_memHits / total) * 10000) / 100 : 0,
+    };
+}
+
+/** 重置内存层统计 (后台可手动清零) */
+export function resetMemStats() { _memHits = 0; _memMisses = 0; }
+
 /** 建表 */
 // 建表只跑一次: 同 isolate 复用后续请求不再重复执行 DDL
 let _urlCacheEnsured = false;
@@ -64,16 +109,36 @@ export async function recordCacheMiss(db, n = 1) {
  */
 export async function getCachedUrls(db, mids, quality) {
     if (!mids || mids.length === 0) return {};
-    const keys = mids.map(function(m){ return m + ":" + quality; });
+    const result = {};
+    const missing = [];
+    // 1) 内存优先: 命中直接取, 零 D1
+    for (let i = 0; i < mids.length; i++) {
+        const mid = mids[i];
+        const m = memGet(mid + ":" + quality);
+        if (m) {
+            result[mid] = { url: m.url, quality: m.quality, createdAt: m.createdAt };
+            _memHits++;
+        } else {
+            missing.push(mid);
+            _memMisses++;
+        }
+    }
+    // 全部内存命中: 直接返回, 一次 D1 都不用
+    if (missing.length === 0) return result;
+
+    // 2) 剩余回源 D1 批量查表, 并回填内存
+    const keys = missing.map(function(m){ return m + ":" + quality; });
     const placeholders = keys.map(function(){ return "?"; }).join(",");
     const rows = await db.prepare(
-        `SELECT mid, url, actual_quality, created_at FROM url_cache WHERE cache_key IN (${placeholders})`
+        `SELECT cache_key, mid, url, actual_quality, created_at FROM url_cache WHERE cache_key IN (${placeholders})`
     ).bind(...keys).all();
-    const result = {};
     const list = (rows && rows.results) || [];
     for (const row of list) {
         if (row.url) {
-            result[row.mid] = { url: row.url, quality: row.actual_quality || quality, createdAt: row.created_at || 0 };
+            const q = row.actual_quality || quality;
+            const ca = row.created_at || 0;
+            result[row.mid] = { url: row.url, quality: q, createdAt: ca };
+            memSet(row.cache_key || (row.mid + ":" + quality), row.url, q, ca);
         }
     }
     return result;
@@ -91,6 +156,8 @@ export async function saveCachedUrl(db, mid, quality, url, actualQuality) {
             actual_quality = excluded.actual_quality,
             created_at = excluded.created_at`)
         .bind(key, mid, quality, url, actualQuality || quality, now).run();
+    // 同步写内存, 下次命中零 D1
+    memSet(key, url, actualQuality || quality, now);
 }
 
 /** 分页列出缓存条目 */
@@ -100,12 +167,14 @@ export async function listCache(db, page = 1, size = 20, keyword = "") {
     const kw = String(keyword || "").trim();
     let totalRow, rows;
     if (kw) {
-        const like = "%" + kw + "%";
-        totalRow = await db.prepare("SELECT COUNT(*) AS c FROM url_cache WHERE mid LIKE ? OR url LIKE ?").bind(like, like).first();
+        // mid 前缀匹配走 idx_url_cache_mid 索引; url 是外链不做索引, 仅作兜底包含匹配
+        const prefix = kw + "%";
+        const contains = "%" + kw + "%";
+        totalRow = await db.prepare("SELECT COUNT(*) AS c FROM url_cache WHERE mid LIKE ? OR url LIKE ?").bind(prefix, contains).first();
         rows = await db.prepare(
             `SELECT cache_key, mid, quality, url, actual_quality, created_at FROM url_cache
              WHERE mid LIKE ? OR url LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?`
-        ).bind(like, like, size, offset).all();
+        ).bind(prefix, contains, size, offset).all();
     } else {
         totalRow = await db.prepare("SELECT COUNT(*) AS c FROM url_cache").first();
         rows = await db.prepare(
@@ -119,11 +188,13 @@ export async function listCache(db, page = 1, size = 20, keyword = "") {
 /** 删除一条缓存 */
 export async function deleteCacheEntry(db, cacheKey) {
     await db.prepare("DELETE FROM url_cache WHERE cache_key = ?").bind(cacheKey).run();
+    memDel(cacheKey);
 }
 
 /** 清空全部缓存 */
 export async function clearCache(db) {
     await db.prepare("DELETE FROM url_cache").run();
+    _memCache.clear();
 }
 
 /** 读取命中率统计 */
@@ -135,12 +206,58 @@ export async function getCacheStats(db) {
     const hits = (s && s.hits) || 0;
     const misses = (s && s.misses) || 0;
     const total = hits + misses;
+    const mem = getMemStats();
     return {
         hits,
         misses,
         total,
         count: (c && c.c) || 0,
         hitRate: total > 0 ? Math.round((hits / total) * 10000) / 100 : 0,
+        // 内存层统计 (isolate 级): 直接反映省下的 D1 查表次数
+        memHits: mem.hits,
+        memMisses: mem.misses,
+        memTotal: mem.total,
+        memSize: mem.size,
+        memHitRate: mem.hitRate,
+        // 估算: 内存命中即省下一次 D1 查表往返
+        savedD1: mem.hits,
+    };
+}
+
+/**
+ * 缓存分布统计 (图形化用): 按请求音质 / 命中音质 / 新鲜度分桶
+ * 全部走聚合查询, 单次请求返回, 不做全表返回。
+ */
+export async function getCacheDistribution(db) {
+    await ensureUrlCacheTable(db);
+    const now = Math.floor(Date.now() / 1000);
+    const q = await db.prepare(
+        "SELECT quality, COUNT(*) AS c FROM url_cache GROUP BY quality ORDER BY c DESC"
+    ).all();
+    const aq = await db.prepare(
+        "SELECT COALESCE(actual_quality, quality) AS aq, COUNT(*) AS c FROM url_cache GROUP BY aq ORDER BY c DESC"
+    ).all();
+    // 新鲜度: 30 分钟内 / 30-60 分钟 / 1-24 小时 / 超过 1 天
+    const fresh = await db.prepare(`SELECT
+        SUM(CASE WHEN created_at > ? THEN 1 ELSE 0 END) AS f30m,
+        SUM(CASE WHEN created_at <= ? AND created_at > ? THEN 1 ELSE 0 END) AS f1h,
+        SUM(CASE WHEN created_at <= ? AND created_at > ? THEN 1 ELSE 0 END) AS f24h,
+        SUM(CASE WHEN created_at <= ? THEN 1 ELSE 0 END) AS fold
+        FROM url_cache`)
+        .bind(now - 1800, now - 1800, now - 3600, now - 3600, now - 86400, now - 86400).first();
+    const top = await db.prepare(
+        "SELECT mid, COUNT(*) AS c FROM url_cache GROUP BY mid ORDER BY c DESC LIMIT 10"
+    ).all();
+    return {
+        byQuality: (q.results || []).map(r => ({ key: r.quality || 'unknown', count: r.c || 0 })),
+        byActualQuality: (aq.results || []).map(r => ({ key: r.aq || 'unknown', count: r.c || 0 })),
+        topMids: (top.results || []).map(r => ({ key: r.mid || 'unknown', count: r.c || 0 })),
+        freshness: [
+            { key: '<30分钟', count: (fresh && fresh.f30m) || 0 },
+            { key: '30分钟-1小时', count: (fresh && fresh.f1h) || 0 },
+            { key: '1-24小时', count: (fresh && fresh.f24h) || 0 },
+            { key: '>1天', count: (fresh && fresh.fold) || 0 },
+        ],
     };
 }
 

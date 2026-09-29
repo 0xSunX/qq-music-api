@@ -40,11 +40,22 @@ Fork 此仓库到你的 GitHub 账户。
 | `INITIAL_CREDENTIAL` | 首次部署的凭证 JSON 种子，仅库空时写入 | 是 |
 | `SETUP_KEY` | 站点初始化部署密钥，`/api/setup` POST 需带请求头 `X-Setup-Key` 匹配；不配则初始化入口禁用 | 是 |
 | `DEVICE_SECRET` | 设备标识 HMAC-SHA256 签名密钥；配置后注册/登录的 deviceId 必须为服务端签发的合法签名 | 是 |
+| `REQUEST_SECRET` | 请求签名 HMAC-SHA256 密钥，用于防抓包重放/脚本刷；与后台「风控防护」页的签名开关**同时满足**才真正校验请求签名，二缺一自动跳过 | 否 |
 
 每个添加后点击 **Save and Deploy**。
 
 > 凭证可用 [tooplick/qq-music-download](https://github.com/tooplick/qq-music-download) 登录获取
-> `SETUP_KEY` / `DEVICE_SECRET` 建议用长随机串 (如 `openssl rand -hex 32` 生成)。`DEVICE_SECRET` 一旦更换，所有已签发的 deviceId 全部失效，需客户端重新换取。
+> `SETUP_KEY` / `DEVICE_SECRET` / `REQUEST_SECRET` 建议用长随机串 (如 `openssl rand -hex 32` 生成)。`DEVICE_SECRET` 一旦更换，所有已签发的 deviceId 全部失效，需客户端重新换取。
+
+**关于 `REQUEST_SECRET`（可选，请求签名/防重放）**
+
+1. **配置位置**：与其它 Secret 完全一致——Cloudflare Dashboard → 你的 Worker → **Settings** → **Variables and Secrets** → **Add**，Name 填 `REQUEST_SECRET`，Type 选 **Secret**，Value 填 `openssl rand -hex 32` 生成的随机串，保存后 **Save and Deploy**。
+2. **启用条件（双开关，缺一不生效）**：
+   - ① 配好 `REQUEST_SECRET` 这个 Secret；
+   - ② 登录后台 → 控制台「🛡 风控防护」→ 点「切换请求签名校验」打开开关（对应 `risk_config.req_sign_enabled = 1`）。
+   两个条件都满足，服务端才会校验请求头 `X-Req-Sign` / `X-Req-Ts` / `X-Req-Nonce`；只配 Secret 不开开关、或只开开关没配 Secret，签名校验都会被自动跳过，不会误伤线上。
+3. **签名算法**：客户端对 `method + "\n" + path + "\n" + ts + "\n" + nonce + "\n" + sha256Hex(body)` 做 HMAC-SHA256（小写 hex）；时间窗 ±300 秒；nonce 落 `req_nonce` 表防重放，重复即拒。
+4. **⚠️ 开启前必读**：一旦开关打开，**所有访问私有业务端点（`/api/song/*`、`/api/lyric`、`/api/album`、`/api/playlist`、`/api/singer`、`/api/credential/refresh`、`/api/user?action=me|logout|appopen`）的客户端都必须带合法签名**，否则返回 403。老客户端若未适配签名逻辑会直接不可用——建议确认客户端已支持、或先灰度，再开这个开关。
 
 ### 6. 初始化
 
@@ -64,7 +75,7 @@ Fork 此仓库到你的 GitHub 账户。
 | `/api/album?mid=xxx` | 获取专辑详情 |
 | `/api/playlist?id=xxx` | 获取歌单详情 |
 | `/api/singer?mid=xxx` | 获取歌手信息 |
-| `/api/top` | 获取排行榜 |
+| `/api/top` | 获取排行榜 (公开, 无需登录; 按 IP 限流 30 次/分钟) |
 | `/admin` | 数据库初始化 |
 
 ### 音质参数说明
