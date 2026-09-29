@@ -6,7 +6,11 @@
  */
 
 /** 建表 */
+// 建表只跑一次: 同 isolate 复用后续请求不再重复执行 DDL
+let _urlCacheEnsured = false;
+
 export async function ensureUrlCacheTable(db) {
+    if (_urlCacheEnsured) return;
     await db.prepare(`CREATE TABLE IF NOT EXISTS url_cache (
         cache_key TEXT PRIMARY KEY,
         mid TEXT NOT NULL,
@@ -16,16 +20,24 @@ export async function ensureUrlCacheTable(db) {
         created_at INTEGER
     )`).run();
     await db.prepare(`CREATE INDEX IF NOT EXISTS idx_url_cache_created ON url_cache(created_at)`).run();
+    // mid 索引: 加速按 mid 精确/前缀查询
+    await db.prepare(`CREATE INDEX IF NOT EXISTS idx_url_cache_mid ON url_cache(mid)`).run();
+    _urlCacheEnsured = true;
 }
 
 /** 命中/未命中统计表 (单行, id 恒为 1) */
+// 统计表建表只跑一次: 缓存命中/未命中是热路径, 不能每次都跑 DDL
+let _cacheStatsEnsured = false;
+
 export async function ensureCacheStatsTable(db) {
+    if (_cacheStatsEnsured) return;
     await db.prepare(`CREATE TABLE IF NOT EXISTS url_cache_stats (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         hits INTEGER DEFAULT 0,
         misses INTEGER DEFAULT 0
     )`).run();
     await db.prepare(`INSERT OR IGNORE INTO url_cache_stats (id, hits, misses) VALUES (1, 0, 0)`).run();
+    _cacheStatsEnsured = true;
 }
 
 /** 记录命中 (原子递增) */

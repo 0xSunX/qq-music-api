@@ -35,6 +35,7 @@ tr:hover{background:#222}
 .tag{padding:2px 8px;border-radius:4px;font-size:.72rem;font-weight:700}
 .tag-vip{background:#f0a020;color:#000}
 .tag-normal{background:#333;color:#aaa}
+.tag-admin{background:#7a3fb0;color:#fff}
 .tag-on{background:#31c27c;color:#000}
 .tag-off{background:#f44;color:#fff}
 .act{cursor:pointer;background:#2a2a2a;border:1px solid #444;color:#e0e0e0;border-radius:3px;padding:3px 8px;font-size:.75rem;margin-right:4px;margin-bottom:2px}
@@ -159,9 +160,11 @@ function renderRows(list){
     var tr = document.createElement('tr');
     tr.appendChild(td(u.id));
     tr.appendChild(td(u.username));
-    var lvLabel = u.level === 'vip' ? '会员' : (u.level === 'normal' ? '普通用户' : u.level);
-    var tdl = td(''); tdl.appendChild(tag(lvLabel, u.level === 'vip' ? 'tag-vip' : 'tag-normal')); tr.appendChild(tdl);
-    tr.appendChild(td(u.role));
+    // 等级显示名统一由后端 levelLabel 提供(单一数据源)
+    var lvLabel = u.levelLabel || '普通用户';
+    var lvCls = u.role === 'admin' ? 'tag-admin' : (u.level === 'vip' ? 'tag-vip' : 'tag-normal');
+    var tdl = td(''); tdl.appendChild(tag(lvLabel, lvCls)); tr.appendChild(tdl);
+    tr.appendChild(td(u.role === 'admin' ? '管理员' : '普通用户'));
     var tds = td(''); tds.appendChild(tag(u.status === 1 ? '正常' : '禁用', u.status === 1 ? 'tag-on' : 'tag-off')); tr.appendChild(tds);
     tr.appendChild(td(u.role === 'admin' ? '∞' : (u.level === 'vip' ? 1000 : u.dailyLimit)));
     tr.appendChild(td((u.apiToday || 0) + ' / ' + (u.apiTotal || 0)));

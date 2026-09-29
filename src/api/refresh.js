@@ -14,7 +14,8 @@ import { buildCommonParams, buildCookies, jsonResponse, errorResponse, handleOpt
 import { generateSign } from "../lib/sign.js";
 import { API_CONFIG } from "../lib/common.js";
 import { ensureUrlCacheTable } from "../lib/urlcache.js";
-import { cleanStaleRegisterRate, cleanStaleIpRate } from "../lib/user.js";
+import { cleanStaleRegisterRate, cleanStaleIpRate, cleanStaleLoginRate } from "../lib/user.js";
+import { cleanStaleDeviceRegistry } from "../lib/device.js";
 
 /**
  * 刷新凭证
@@ -183,6 +184,22 @@ export async function onSchedule(context) {
         console.log(`[Cron] 已清理 ${removedIp} 条陈旧 IP 限流记录`);
     } catch (err) {
         console.error("[Cron] 清理 IP 限流记录失败:", err);
+    }
+
+    // 清理陈旧的登录限速记录, 防止 login_rate 表无限膨胀
+    try {
+        const removedLogin = await cleanStaleLoginRate(env.DB, 7);
+        console.log(`[Cron] 已清理 ${removedLogin} 条陈旧登录限速记录`);
+    } catch (err) {
+        console.error("[Cron] 清理登录限速记录失败:", err);
+    }
+
+    // 清理过期的设备指纹登记记录
+    try {
+        const removedDev = await cleanStaleDeviceRegistry(env.DB, 7);
+        console.log(`[Cron] 已清理 ${removedDev} 条过期设备登记记录`);
+    } catch (err) {
+        console.error("[Cron] 清理设备登记记录失败:", err);
     }
 }
 

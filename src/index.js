@@ -710,7 +710,7 @@ export default {
             const urlObj = new URL(request.url);
             const action = urlObj.searchParams.get("action") || "";
             // 用户接口的 register/login 也免鉴权
-            const isAuthAction = path === "/api/user" && (action === "register" || action === "login");
+            const isAuthAction = path === "/api/user" && (action === "register" || action === "login" || action === "device");
 
             // 公开端点 IP 限流: 无登录态, 按 IP+端点做窗口计数防刷
             // 仅覆盖公开的统计类端点(search/app update/app notice), 避免上游凭证被匿名刷爆
@@ -795,8 +795,9 @@ export default {
                 }
                 throw e;
             }
-            // 业务返回 >=400 视为失败, 回滚配额(参数错/鉴权错/上游错都不计入)
-            if (usageReserved && resp.status >= 400) {
+            // 配额策略: 仅服务端系统错误(>=500)才回滚; 4xx(参数错/越权/上游业务失败)一律不回滚,
+            // 防止攻击者用必然失败的请求白嫖上游配额。
+            if (usageReserved && resp.status >= 500) {
                 try { await releaseUsage(env.DB, currentUser.id); } catch (e) { console.error("释放用量失败:", e); }
             }
             return resp;

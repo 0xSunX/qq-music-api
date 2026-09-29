@@ -129,6 +129,12 @@ tr:hover{background:#222}
   document.getElementById('load').onclick=function(){ PAGE=1; loadStats(); loadList(); };
   document.getElementById('prev').onclick=function(){ if(PAGE>1){ PAGE--; loadList(); } };
   document.getElementById('next').onclick=function(){ PAGE++; loadList(); };
+  // 搜索防抖: 输入 300ms 后再查, 避免每敲一键都打一次接口
+  var searchTimer=null;
+  kwEl.addEventListener('input', function(){
+    if(searchTimer) clearTimeout(searchTimer);
+    searchTimer=setTimeout(function(){ PAGE=1; loadList(); }, 300);
+  });
   document.getElementById('back').onclick=function(){ location.href='/admin'; };
   document.getElementById('clear').onclick=function(){ if(!tokenEl.value.trim()){ setStatus('请先填入 Token',true); return; } if(!confirm('确定清空全部缓存? 不可恢复')) return; api('action=clear',{method:'POST',body:'{}'}).then(function(res){ if(!res.ok){ setStatus('清空失败: '+(res.data.error||res.status),true); return; } setStatus('缓存已清空'); PAGE=1; loadList(); loadStats(); }); };
   tokenEl.value=localStorage.getItem('adminToken')||'';

@@ -2,6 +2,8 @@
  * 用户系统 - 注册 / 登录 / 会话 / 分级 / 限流 / 管理
  */
 
+import { verifyDeviceId } from "./device.js";
+
 const PBKDF2_ITER = 100000;
 const SESSION_TTL = 30 * 24 * 3600;   // 30 天
 const DEFAULT_DAILY_LIMIT = 50;
@@ -34,7 +36,11 @@ export function todayStr() {
 
 // ---------- 建表 ----------
 
+// 建表只跑一次: 同 isolate 复用后续请求不再重复执行 DDL
+let _userTablesEnsured = false;
+
 export async function ensureUserTables(db) {
+    if (_userTablesEnsured) return;
     await db.prepare(`CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
@@ -85,6 +91,15 @@ export async function ensureUserTables(db) {
         count INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (ip, endpoint)
     )`).run();
+    // 登录限速: 按 IP / 用户名 双维度记录窗口内失败次数, 防爆破
+    await db.prepare(`CREATE TABLE IF NOT EXISTS login_rate (
+        scope TEXT NOT NULL,
+        key TEXT NOT NULL,
+        window_start INTEGER NOT NULL,
+        count INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (scope, key)
+    )`).run();
+    _userTablesEnsured = true;
 }
 
 /**
@@ -142,6 +157,77 @@ export async function cleanStaleIpRate(db, days = 7) {
     return (r.meta && r.meta.changes) || 0;
 }
 
+/**
+ * 清理陈旧的登录限速记录, 防止 login_rate 表无限膨胀。
+ */
+export async function cleanStaleLoginRate(db, days = 7) {
+    const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
+    const r = await db.prepare('DELETE FROM login_rate WHERE window_start < ?').bind(cutoff).run();
+    return (r.meta && r.meta.changes) || 0;
+}
+
+/**
+ * 登录限速: 同一 scope('ip'/'user') + key 在 windowSec 秒内最多 limit 次。
+ * 单条 UPSERT 判窗口+计数, 避免竞态。
+ * @returns {Promise<boolean>} true=允许, false=超限
+ */
+export async function checkLoginRate(db, scope, key, limit = 10, windowSec = 900) {
+    const now = Math.floor(Date.now() / 1000);
+    const r = await db.prepare(`INSERT INTO login_rate (scope, key, window_start, count) VALUES (?, ?, ?, 1)
+        ON CONFLICT(scope, key) DO UPDATE SET
+            count = CASE WHEN login_rate.window_start <= ? THEN 1 ELSE login_rate.count + 1 END,
+            window_start = CASE WHEN login_rate.window_start <= ? THEN ? ELSE login_rate.window_start END
+        WHERE login_rate.window_start <= ? OR login_rate.count < ?`)
+        .bind(scope, key, now, now - windowSec, now - windowSec, now, now - windowSec, limit).run();
+    return !!(r.meta && r.meta.changes > 0);
+}
+
+/**
+ * 校验 deviceId。配置了 deviceSecret 时必须为服务端签发的合法签名;
+ * 未配置时回退旧的长度校验(仅限开发环境)。
+ */
+export async function checkDeviceId(deviceSecret, deviceId) {
+    const raw = String(deviceId || "").trim();
+    if (deviceSecret) {
+        const r = await verifyDeviceId(deviceSecret, raw);
+        if (!r.valid) return { ok: false, error: "设备标识无效或已过期(需服务端签发)" };
+        return { ok: true, fingerprint: r.fingerprint };
+    }
+    if (raw.length < 6 || raw.length > 128) {
+        return { ok: false, error: "设备标识格式不合法(需 6-128 字符)" };
+    }
+    return { ok: true, fingerprint: raw };
+}
+
+/** 登录失败计数 +1 (用户名维度) */
+export async function recordLoginFail(db, username) {
+    try {
+        await checkLoginRate(db, "user", String(username || "").toLowerCase(), 10, 900);
+    } catch (e) { console.error("记录登录失败异常:", e); }
+}
+
+/** 读取用户名维度当前失败计数(只读, 不递增) */
+export async function getLoginFailCount(db, username) {
+    try {
+        const now = Math.floor(Date.now() / 1000);
+        const row = await db.prepare(
+            "SELECT count, window_start FROM login_rate WHERE scope = 'user' AND key = ?"
+        ).bind(String(username || "").toLowerCase()).first();
+        if (!row || !row.window_start) return 0;
+        // 窗口已过期视为 0
+        if (row.window_start <= now - 900) return 0;
+        return row.count || 0;
+    } catch (e) { return 0; }
+}
+
+/** 登录成功清除用户名维度失败计数 */
+export async function clearLoginFail(db, username) {
+    try {
+        await db.prepare("DELETE FROM login_rate WHERE scope = 'user' AND key = ?")
+            .bind(String(username || "").toLowerCase()).run();
+    } catch (e) { /* ignore */ }
+}
+
 /** 记录一次 APP 打开, 原子递增当日计数 */
 export async function recordAppOpen(db, userId) {
     await db.prepare(`INSERT INTO app_open_daily (user_id, date, count) VALUES (?, ?, 1)
@@ -177,7 +263,7 @@ export async function getUserById(db, id) {
     return await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
 }
 
-export async function registerUser(db, username, password, deviceId) {
+export async function registerUser(db, username, password, deviceId, deviceSecret) {
     if (!username || !/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
         throw new Error('用户名需 3-20 位字母、数字或下划线');
     }
@@ -187,8 +273,9 @@ export async function registerUser(db, username, password, deviceId) {
     if (password.length > 128) {
         throw new Error('密码过长');
     }
-    if (!deviceId || String(deviceId).trim().length < 6 || String(deviceId).trim().length > 128) {
-        throw new Error('设备标识格式不合法(需 6-128 字符)');
+    const deviceCheck = await checkDeviceId(deviceSecret, deviceId);
+    if (!deviceCheck.ok) {
+        throw new Error(deviceCheck.error);
     }
     const salt = randomHex(16);
     const hash = await hashPassword(password, salt);
@@ -212,15 +299,16 @@ export async function registerUser(db, username, password, deviceId) {
     }
 }
 
-export async function loginUser(db, username, password, deviceId) {
+export async function loginUser(db, username, password, deviceId, deviceSecret) {
     const user = await getUserByName(db, username);
     if (!user) throw new Error('用户名或密码错误');
     if (user.status === 0) throw new Error('账号已被禁用');
     const hash = await hashPassword(password, user.salt);
     if (hash !== user.password_hash) throw new Error('用户名或密码错误');
 
+    const deviceCheck = await checkDeviceId(deviceSecret, deviceId);
+    if (!deviceCheck.ok) throw new Error(deviceCheck.error);
     const device = String(deviceId || "").trim();
-    if (!device) throw new Error('缺少设备标识');
 
     const token = randomHex(32);
     const now = Math.floor(Date.now() / 1000);
@@ -253,11 +341,23 @@ export async function verifySession(db, token, deviceId) {
     return row;
 }
 
+/**
+ * 用户等级的对外显示名: 管理员 / 会员 / 普通用户。
+ * 判定优先级: role=admin > level=vip > 其余为普通用户。
+ */
+export function displayLevel(u) {
+    if (!u) return '普通用户';
+    if (u.role === 'admin') return '管理员';
+    if (u.level === 'vip') return '会员';
+    return '普通用户';
+}
+
 export function publicUser(u) {
     return {
         id: u.id,
         username: u.username,
         level: u.level,
+        levelLabel: displayLevel(u),
         role: u.role,
         status: u.status,
         dailyLimit: u.daily_limit,
@@ -317,19 +417,28 @@ export async function listUsers(db, page = 1, size = 20, keyword = "") {
     const kw = String(keyword || "").trim();
     // keyword 非空时按用户名前缀 或 用户ID精确 全库过滤, 否则全量分页
     // 前缀匹配 (LIKE 'kw%') 可走 idx_users_username 索引; %kw% 中间匹配会退化为全表扫, 如需请上 FTS5
-    const whereSql = kw ? "WHERE u.username LIKE ? OR CAST(u.id AS TEXT) = ?" : "";
-    const total = kw
-        ? await db.prepare(`SELECT COUNT(*) AS c FROM users u ${whereSql}`).bind(kw + "%", kw).first()
-        : await db.prepare('SELECT COUNT(*) AS c FROM users').first();
+    // 关键字: 纯数字按用户ID精确命中主键; 否则按用户名前缀(走 idx_users_username)
+    // 避免 CAST(u.id AS TEXT) 导致主键索引失效
+    const isNumKw = /^\d+$/.test(kw);
+    let whereSql = "";
+    let whereBinds = [];
+    if (kw) {
+        if (isNumKw) {
+            whereSql = "WHERE u.username LIKE ? OR u.id = ?";
+            whereBinds = [kw + "%", parseInt(kw, 10)];
+        } else {
+            whereSql = "WHERE u.username LIKE ?";
+            whereBinds = [kw + "%"];
+        }
+    }
+    const total = await db.prepare(`SELECT COUNT(*) AS c FROM users u ${whereSql}`).bind(...whereBinds).first();
     const rowSql = `SELECT u.*,
         (SELECT COUNT FROM usage_daily WHERE user_id = u.id AND date = ?) AS api_today,
         (SELECT COALESCE(SUM(count),0) FROM usage_daily WHERE user_id = u.id) AS api_total,
         (SELECT COUNT FROM app_open_daily WHERE user_id = u.id AND date = ?) AS open_today,
         (SELECT COALESCE(SUM(count),0) FROM app_open_daily WHERE user_id = u.id) AS open_total
         FROM users u ${whereSql} ORDER BY u.id DESC LIMIT ? OFFSET ?`;
-    const rows = kw
-        ? await db.prepare(rowSql).bind(today, today, kw + "%", kw, size, offset).all()
-        : await db.prepare(rowSql).bind(today, today, size, offset).all();
+    const rows = await db.prepare(rowSql).bind(today, today, ...whereBinds, size, offset).all();
     return {
         total: total ? total.c : 0,
         list: (rows.results || []).map(function(u){
@@ -358,6 +467,7 @@ export async function deleteUser(db, userId) {
     await db.batch([
         db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId),
         db.prepare('DELETE FROM usage_daily WHERE user_id = ?').bind(userId),
+        db.prepare('DELETE FROM app_open_daily WHERE user_id = ?').bind(userId),
         db.prepare('DELETE FROM users WHERE id = ?').bind(userId),
     ]);
 }
@@ -368,6 +478,7 @@ export function adminUser(u) {
         id: u.id,
         username: u.username,
         level: u.level,
+        levelLabel: displayLevel(u),
         role: u.role,
         status: u.status,
         dailyLimit: u.daily_limit,

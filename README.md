@@ -31,15 +31,20 @@ Fork 此仓库到你的 GitHub 账户。
 3. Build command 留空
 4. 点击 **Save and Deploy**
 
-### 5. 设置凭证
+### 5. 设置密钥 (Secrets)
 
-1. 进入 **Settings** > **Variables and Secrets** > **Add**
-2. Type: **Secret**
-3. Name: `INITIAL_CREDENTIAL`
-4. Value: 粘贴你的凭证 JSON
-5. 点击 **Save and Deploy**
+进入 **Settings** > **Variables and Secrets** > **Add**，依次添加以下三个 Secret (Type 选 **Secret**)：
+
+| Name | 说明 | 是否必须 |
+|------|------|---------|
+| `INITIAL_CREDENTIAL` | 首次部署的凭证 JSON 种子，仅库空时写入 | 是 |
+| `SETUP_KEY` | 站点初始化部署密钥，`/api/setup` POST 需带请求头 `X-Setup-Key` 匹配；不配则初始化入口禁用 | 是 |
+| `DEVICE_SECRET` | 设备标识 HMAC-SHA256 签名密钥；配置后注册/登录的 deviceId 必须为服务端签发的合法签名 | 是 |
+
+每个添加后点击 **Save and Deploy**。
 
 > 凭证可用 [tooplick/qq-music-download](https://github.com/tooplick/qq-music-download) 登录获取
+> `SETUP_KEY` / `DEVICE_SECRET` 建议用长随机串 (如 `openssl rand -hex 32` 生成)。`DEVICE_SECRET` 一旦更换，所有已签发的 deviceId 全部失效，需客户端重新换取。
 
 ### 6. 初始化
 

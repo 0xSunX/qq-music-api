@@ -29,7 +29,31 @@ export async function onRequest(context) {
     if (request.method === "POST") {
         try {
             await ensureUserTables(env.DB);
+
+            // 部署密钥校验: 必须配置 SETUP_KEY 且请求头 X-Setup-Key 一致, 否则入口直接禁用
+            const setupKey = env.SETUP_KEY;
+            if (!setupKey) {
+                return errorResponse("未配置 SETUP_KEY, 初始化入口已禁用", 403);
+            }
+            if ((request.headers.get("X-Setup-Key") || "") !== setupKey) {
+                return errorResponse("初始化密钥无效", 403);
+            }
+
+            // 原子占锁: 单条 UPSERT 保证同一时刻只有一个初始化请求能通过, 消除 check-then-act 竞态
+            await env.DB.prepare(`CREATE TABLE IF NOT EXISTS setup_lock (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                locked_at INTEGER
+            )`).run();
+            const lock = await env.DB.prepare(
+                "INSERT INTO setup_lock (id, locked_at) VALUES (1, ?) ON CONFLICT(id) DO NOTHING"
+            ).bind(Math.floor(Date.now() / 1000)).run();
+            if (!(lock.meta && lock.meta.changes > 0)) {
+                return errorResponse("初始化已在进行或已完成, 入口已锁定", 403);
+            }
+
             if (await isInitialized(env.DB)) {
+                // 释放本次占用的锁, 避免锁残留堵塞后续重置路径
+                try { await env.DB.prepare("DELETE FROM setup_lock WHERE id = 1").run(); } catch (_) {}
                 return errorResponse("站点已初始化, 初始化入口已锁定", 403);
             }
 
@@ -45,7 +69,7 @@ export async function onRequest(context) {
             }
 
             // 清空所有业务表(逐表执行, 失败记录到 warnings, 不再静默吞掉)
-            const tables = ["credentials", "sessions", "usage_daily", "users", "api_stats"];
+            const tables = ["credentials", "sessions", "usage_daily", "users", "api_stats", "app_open_daily", "url_cache", "app_notices", "app_releases", "register_rate", "ip_rate", "login_rate", "device_registry"];
             const warnings = [];
             for (const t of tables) {
                 try { await env.DB.prepare("DELETE FROM " + t).run(); }
@@ -61,7 +85,7 @@ export async function onRequest(context) {
             const adminDevice = "setup-" + randomHex(8);
             const r = await env.DB.prepare(
                 `INSERT INTO users (username, password_hash, salt, role, level, device_id, daily_limit, created_at, updated_at)
-                 VALUES (?, ?, ?, 'admin', '管理员', ?, 100000, ?, ?)`
+                 VALUES (?, ?, ?, 'admin', 'vip', ?, 100000, ?, ?)`
             ).bind(username, hash, salt, adminDevice, now, now).run();
 
             const resp = {
@@ -71,9 +95,13 @@ export async function onRequest(context) {
                 username,
             };
             if (warnings.length) resp.warnings = warnings;
+            // 初始化完成: 释放进行中锁。持久防重复初始化由 users 表 admin 存在性承担, 锁仅用于并发互斥。
+            try { await env.DB.prepare("DELETE FROM setup_lock WHERE id = 1").run(); } catch (_) {}
             return jsonResponse(resp);
         } catch (err) {
             console.error("初始化失败:", err);
+            // 初始化失败: 释放锁, 允许在修复问题后重试
+            try { await env.DB.prepare("DELETE FROM setup_lock WHERE id = 1").run(); } catch (_) {}
             return errorResponse(err.message, 500);
         }
     }

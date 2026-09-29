@@ -13,8 +13,14 @@ import {
     getUsageToday,
     recordAppOpen,
     checkRegisterRate,
+    checkLoginRate,
+    checkIpRate,
+    recordLoginFail,
+    clearLoginFail,
+    getLoginFailCount,
     VIP_DAILY_LIMIT,
 } from "../lib/user.js";
+import { signDeviceIdDedup } from "../lib/device.js";
 
 export async function onRequest(context) {
     const { request, env, user } = context;
@@ -42,15 +48,54 @@ export async function onRequest(context) {
             } catch (e) {
                 return errorResponse("请求体需为合法 JSON", 400);
             }
-            const id = await registerUser(env.DB, body.username, body.password, body.deviceId);
+            const id = await registerUser(env.DB, body.username, body.password, body.deviceId, env.DEVICE_SECRET);
             return jsonResponse({ code: 0, message: "注册成功", userId: id });
         }
 
         if (action === "login") {
             if (request.method !== "POST") return errorResponse("Method not allowed", 405);
-            const body = await request.json();
-            const r = await loginUser(env.DB, body.username, body.password, body.deviceId);
-            return jsonResponse({ code: 0, token: r.token, user: r.user });
+            let body;
+            try { body = await request.json(); }
+            catch (e) { return errorResponse("请求体需为合法 JSON", 400); }
+            // IP 维度登录限速(防爆破): 同一 IP 15 分钟内最多 20 次尝试
+            const ip = (request.headers.get("CF-Connecting-IP")
+                || (request.headers.get("X-Forwarded-For") || "").split(",")[0].trim()
+                || "unknown");
+            const ipOk = await checkLoginRate(env.DB, "ip", ip, 20, 900);
+            if (!ipOk) return errorResponse("登录尝试过于频繁, 请稍后再试", 429);
+            // 用户名维度锁定: 15 分钟内失败达 10 次直接拒绝, 防定向爆破
+            const failCount = await getLoginFailCount(env.DB, body.username);
+            if (failCount >= 10) return errorResponse("该账号失败次数过多, 请稍后再试", 429);
+            try {
+                const r = await loginUser(env.DB, body.username, body.password, body.deviceId, env.DEVICE_SECRET);
+                await clearLoginFail(env.DB, body.username);
+                return jsonResponse({ code: 0, token: r.token, user: r.user });
+            } catch (e) {
+                // 用户名维度失败计数(15 分钟内最多 10 次失败)
+                await recordLoginFail(env.DB, body.username);
+                return errorResponse(e.message, 400);
+            }
+        }
+
+        if (action === "device") {
+            // 签发设备标识签名(公开): 客户端用稳定 fingerprint 换取带签名的 deviceId
+            if (request.method !== "POST") return errorResponse("Method not allowed", 405);
+            if (!env.DEVICE_SECRET) return errorResponse("服务端未配置 DEVICE_SECRET", 503);
+            // IP 限流: 同一 IP 每分钟最多 30 次签发, 防海量随机指纹灌登记表
+            const devIp = (request.headers.get("CF-Connecting-IP")
+                || (request.headers.get("X-Forwarded-For") || "").split(",")[0].trim()
+                || "unknown");
+            const devIpOk = await checkIpRate(env.DB, devIp, "/api/user?action=device", 30, 60);
+            if (!devIpOk) return errorResponse("设备签发过于频繁, 请稍后再试", 429);
+            let body;
+            try { body = await request.json(); }
+            catch (e) { return errorResponse("请求体需为合法 JSON", 400); }
+            try {
+                const deviceId = await signDeviceIdDedup(env.DB, env.DEVICE_SECRET, body.fingerprint);
+                return jsonResponse({ code: 0, deviceId });
+            } catch (e) {
+                return errorResponse(e.message, 400);
+            }
         }
 
         if (action === "appopen") {
