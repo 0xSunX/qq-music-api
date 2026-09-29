@@ -13,7 +13,8 @@ import {
 import { buildCommonParams, buildCookies, jsonResponse, errorResponse, handleOptions } from "../lib/request.js";
 import { generateSign } from "../lib/sign.js";
 import { API_CONFIG } from "../lib/common.js";
-import { ensureUrlCacheTable, cleanExpiredUrlCache } from "../lib/urlcache.js";
+import { ensureUrlCacheTable } from "../lib/urlcache.js";
+import { cleanStaleRegisterRate, cleanStaleIpRate } from "../lib/user.js";
 
 /**
  * 刷新凭证
@@ -160,13 +161,28 @@ export async function onSchedule(context) {
         console.error("[Cron] 刷新凭证失败:", err);
     }
 
-    // 顺带清理过期的播放链接缓存
+    // 链接缓存改为"请求时校验有效性", 不再定时删除
     try {
         await ensureUrlCacheTable(env.DB);
-        await cleanExpiredUrlCache(env.DB);
-        console.log("[Cron] 已清理过期链接缓存");
+        console.log("[Cron] 链接缓存已启用请求时校验策略, 跳过定时清理");
     } catch (err) {
-        console.error("[Cron] 清理链接缓存失败:", err);
+        console.error("[Cron] 检查链接缓存表失败:", err);
+    }
+
+    // 清理陈旧的注册限速记录, 防止 register_rate 表无限膨胀
+    try {
+        const removed = await cleanStaleRegisterRate(env.DB, 7);
+        console.log(`[Cron] 已清理 ${removed} 条陈旧注册限速记录`);
+    } catch (err) {
+        console.error("[Cron] 清理注册限速记录失败:", err);
+    }
+
+    // 清理陈旧的 IP 限流记录, 防止 ip_rate 表无限膨胀
+    try {
+        const removedIp = await cleanStaleIpRate(env.DB, 7);
+        console.log(`[Cron] 已清理 ${removedIp} 条陈旧 IP 限流记录`);
+    } catch (err) {
+        console.error("[Cron] 清理 IP 限流记录失败:", err);
     }
 }
 

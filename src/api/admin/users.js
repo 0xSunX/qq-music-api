@@ -1,6 +1,7 @@
 /**
  * 管理接口 - 用户列表 / 改等级 / 禁用启用 / 删除
- * 通过 ?action=list|level|status|delete 分发
+ * 通过 ?action=list|level|status|delete|update|detail 分发
+ * list 支持 keyword 参数做全库搜索
  * 需 admin 角色
  */
 
@@ -35,7 +36,8 @@ export async function onRequest(context) {
         if (action === "list") {
             const page = parseInt(url.searchParams.get("page") || "1", 10) || 1;
             const size = Math.min(parseInt(url.searchParams.get("size") || "20", 10) || 20, 100);
-            const r = await listUsers(env.DB, page, size);
+            const keyword = url.searchParams.get("keyword") || "";
+            const r = await listUsers(env.DB, page, size, keyword);
             return jsonResponse({ code: 0, page, size, total: r.total, list: r.list });
         }
 

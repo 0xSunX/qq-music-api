@@ -66,7 +66,7 @@ tr:hover{background:#222}
   <h1>👥 用户管理</h1>
   <div class="bar">
     <input id="token" placeholder="粘贴管理员 Token">
-    <input id="search" placeholder="搜索用户名 / ID">
+    <input id="search" placeholder="用户名前缀 / 用户ID (全库)">
     <button id="load">加载</button>
     <button id="back" class="ghost">返回上一页</button>
     <button id="logout" class="ghost">登出</button>
@@ -139,18 +139,17 @@ function fmtTime(ts){ if(!ts) return '-'; var d = new Date(ts * 1000); return d.
 function loadUsers(){
   if(!tokenEl.value.trim()){ setStatus('请先填入 Token', true); return; }
   setStatus('加载中...');
-  api('list&page=' + PAGE + '&size=' + SIZE, { method: 'GET' }).then(function(res){
+  var kw = searchEl.value.trim();
+  api('list&page=' + PAGE + '&size=' + SIZE + '&keyword=' + encodeURIComponent(kw), { method: 'GET' }).then(function(res){
     if(!res.ok){ setStatus('加载失败: ' + (res.data.error || res.status), true); return; }
     var d = res.data;
     var list = d.list || [];
-    var kw = searchEl.value.trim().toLowerCase();
-    if(kw){ list = list.filter(function(u){ return String(u.id) === kw || String(u.username).toLowerCase().indexOf(kw) >= 0; }); }
     if(list.length === 0){ setStatus('无匹配用户'); tblEl.style.display = 'none'; pagerEl.style.display = 'none'; return; }
     renderRows(list);
     tblEl.style.display = ''; pagerEl.style.display = '';
     var totalPages = Math.ceil(d.total / SIZE) || 1;
     pageinfoEl.textContent = '第 ' + PAGE + ' / ' + totalPages + ' 页 (共 ' + d.total + ' 人)';
-    setStatus('加载完成, 本页 ' + list.length + ' 条');
+    setStatus('加载完成, 本页 ' + list.length + ' 条' + (kw ? ' (全库前缀搜索: ' + kw + ')' : ''));
   }).catch(function(e){ setStatus('请求异常: ' + e.message, true); });
 }
 
@@ -256,7 +255,11 @@ document.getElementById('logout').onclick = function(){
 document.getElementById('mSave').onclick = saveEdit;
 document.getElementById('mCancel').onclick = closeEdit;
 maskEl.onclick = function(e){ if(e.target === maskEl) closeEdit(); };
-searchEl.addEventListener('input', function(){ if(tblEl.style.display !== 'none') loadUsers(); });
+var searchTimer = null;
+searchEl.addEventListener('input', function(){
+  if(searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(function(){ PAGE = 1; loadUsers(); }, 300);
+});
 
 tokenEl.value = localStorage.getItem('adminToken') || '';
 if(tokenEl.value.trim()){ PAGE = 1; loadUsers(); }

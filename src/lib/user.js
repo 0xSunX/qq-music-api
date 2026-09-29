@@ -47,6 +47,8 @@ export async function ensureUserTables(db) {
         updated_at INTEGER
     )`).run();
     await db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_device ON users(device_id)`).run();
+    // username 索引: 支撑全库搜索的前缀匹配 (LIKE 'kw%'), 避免 %kw% 全表扫
+    await db.prepare(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`).run();
     await db.prepare(`CREATE TABLE IF NOT EXISTS sessions (
         token TEXT PRIMARY KEY,
         user_id INTEGER NOT NULL,
@@ -67,6 +69,75 @@ export async function ensureUserTables(db) {
         count INTEGER DEFAULT 0,
         PRIMARY KEY (user_id, date)
     )`).run();
+    // 注册限速: 按 IP 记录窗口内注册次数, 防止批量刷注册
+    await db.prepare(`CREATE TABLE IF NOT EXISTS register_rate (
+        ip TEXT PRIMARY KEY,
+        window_start INTEGER NOT NULL,
+        count INTEGER NOT NULL DEFAULT 0
+    )`).run();
+    // 通用 IP 限流: 按 IP + 端点记录窗口内调用次数, 用于公开端点防刷
+    await db.prepare(`CREATE TABLE IF NOT EXISTS ip_rate (
+        ip TEXT NOT NULL,
+        endpoint TEXT NOT NULL,
+        window_start INTEGER NOT NULL,
+        count INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (ip, endpoint)
+    )`).run();
+}
+
+/**
+ * 注册限速: 同一 IP 在 windowSec 秒内最多 limit 次注册。
+ * 单条 UPSERT 内完成"判断窗口 + 计数", 避免并发竞态。
+ * @returns {Promise<boolean>} true=允许, false=超限
+ */
+export async function checkRegisterRate(db, ip, limit = 5, windowSec = 3600) {
+    const now = Math.floor(Date.now() / 1000);
+    // 窗口过期则重置计数; 未过期则条件递增, 只有 count < limit 时才 +1
+    const r = await db.prepare(`INSERT INTO register_rate (ip, window_start, count) VALUES (?, ?, 1)
+        ON CONFLICT(ip) DO UPDATE SET
+            count = CASE WHEN register_rate.window_start <= ? THEN 1 ELSE register_rate.count + 1 END,
+            window_start = CASE WHEN register_rate.window_start <= ? THEN ? ELSE register_rate.window_start END
+        WHERE register_rate.window_start <= ? OR register_rate.count < ?`)
+        .bind(ip, now, now - windowSec, now - windowSec, now, now - windowSec, limit).run();
+    return !!(r.meta && r.meta.changes > 0);
+}
+
+/**
+ * 清理陈旧的注册限速记录, 防止 register_rate 表无限膨胀。
+ * 窗口早已过期的行留着无意义, 由 Cron 定期删除。
+ * @param {number} days 保留最近 N 天的记录, 默认 7 天
+ */
+export async function cleanStaleRegisterRate(db, days = 7) {
+    const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
+    const r = await db.prepare('DELETE FROM register_rate WHERE window_start < ?').bind(cutoff).run();
+    return (r.meta && r.meta.changes) || 0;
+}
+
+/**
+ * 通用 IP 限流: 同一 IP 对同一端点在 windowSec 秒内最多 limit 次。
+ * 单条 UPSERT 内完成\"判断窗口 + 计数\", 避免并发竞态。
+ * 用于公开端点(无登录态)防刷, 与用户维度的 reserveUsage 互补。
+ * @returns {Promise<boolean>} true=允许, false=超限
+ */
+export async function checkIpRate(db, ip, endpoint, limit = 30, windowSec = 60) {
+    const now = Math.floor(Date.now() / 1000);
+    const r = await db.prepare(`INSERT INTO ip_rate (ip, endpoint, window_start, count) VALUES (?, ?, ?, 1)
+        ON CONFLICT(ip, endpoint) DO UPDATE SET
+            count = CASE WHEN ip_rate.window_start <= ? THEN 1 ELSE ip_rate.count + 1 END,
+            window_start = CASE WHEN ip_rate.window_start <= ? THEN ? ELSE ip_rate.window_start END
+        WHERE ip_rate.window_start <= ? OR ip_rate.count < ?`)
+        .bind(ip, endpoint, now, now - windowSec, now - windowSec, now, now - windowSec, limit).run();
+    return !!(r.meta && r.meta.changes > 0);
+}
+
+/**
+ * 清理陈旧的 IP 限流记录, 防止 ip_rate 表无限膨胀。
+ * @param {number} days 保留最近 N 天的记录, 默认 7 天
+ */
+export async function cleanStaleIpRate(db, days = 7) {
+    const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
+    const r = await db.prepare('DELETE FROM ip_rate WHERE window_start < ?').bind(cutoff).run();
+    return (r.meta && r.meta.changes) || 0;
 }
 
 /** 记录一次 APP 打开, 原子递增当日计数 */
@@ -111,8 +182,11 @@ export async function registerUser(db, username, password, deviceId) {
     if (!password || password.length < 6) {
         throw new Error('密码至少 6 位');
     }
-    if (!deviceId) {
-        throw new Error('缺少设备标识');
+    if (password.length > 128) {
+        throw new Error('密码过长');
+    }
+    if (!deviceId || String(deviceId).trim().length < 6 || String(deviceId).trim().length > 128) {
+        throw new Error('设备标识格式不合法(需 6-128 字符)');
     }
     const salt = randomHex(16);
     const hash = await hashPassword(password, salt);
@@ -235,17 +309,25 @@ export async function releaseUsage(db, userId) {
 
 // ---------- 管理 ----------
 
-export async function listUsers(db, page = 1, size = 20) {
+export async function listUsers(db, page = 1, size = 20, keyword = "") {
     const offset = (page - 1) * size;
-    const total = await db.prepare('SELECT COUNT(*) AS c FROM users').first();
     const today = todayStr();
-    const rows = await db.prepare(`SELECT u.*,
+    const kw = String(keyword || "").trim();
+    // keyword 非空时按用户名前缀 或 用户ID精确 全库过滤, 否则全量分页
+    // 前缀匹配 (LIKE 'kw%') 可走 idx_users_username 索引; %kw% 中间匹配会退化为全表扫, 如需请上 FTS5
+    const whereSql = kw ? "WHERE u.username LIKE ? OR CAST(u.id AS TEXT) = ?" : "";
+    const total = kw
+        ? await db.prepare(`SELECT COUNT(*) AS c FROM users u ${whereSql}`).bind(kw + "%", kw).first()
+        : await db.prepare('SELECT COUNT(*) AS c FROM users').first();
+    const rowSql = `SELECT u.*,
         (SELECT COUNT FROM usage_daily WHERE user_id = u.id AND date = ?) AS api_today,
         (SELECT COALESCE(SUM(count),0) FROM usage_daily WHERE user_id = u.id) AS api_total,
         (SELECT COUNT FROM app_open_daily WHERE user_id = u.id AND date = ?) AS open_today,
         (SELECT COALESCE(SUM(count),0) FROM app_open_daily WHERE user_id = u.id) AS open_total
-        FROM users u ORDER BY u.id DESC LIMIT ? OFFSET ?`)
-        .bind(today, today, size, offset).all();
+        FROM users u ${whereSql} ORDER BY u.id DESC LIMIT ? OFFSET ?`;
+    const rows = kw
+        ? await db.prepare(rowSql).bind(today, today, kw + "%", kw, size, offset).all()
+        : await db.prepare(rowSql).bind(today, today, size, offset).all();
     return {
         total: total ? total.c : 0,
         list: (rows.results || []).map(function(u){

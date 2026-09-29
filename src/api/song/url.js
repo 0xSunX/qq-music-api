@@ -6,7 +6,7 @@
 import { batchRequest, jsonResponse, errorResponse, handleOptions } from "../../lib/request.js";
 import { getGuid, parseQuality, SongFileType } from "../../lib/common.js";
 import { getCredential } from "../../lib/credential.js";
-import { ensureUrlCacheTable, getCachedUrls, saveCachedUrl } from "../../lib/urlcache.js";
+import { ensureUrlCacheTable, getCachedUrls, saveCachedUrl, validateUrl, recordCacheHit, recordCacheMiss } from "../../lib/urlcache.js";
 
 /**
  * 音质降级顺序
@@ -40,28 +40,49 @@ export async function onRequest(context) {
             return errorResponse("Invalid mid parameter", 400);
         }
 
-        // 1. 先查播放链接缓存(10 分钟内同 mid + 音质直接复用)
+        // 1. 先查播放链接缓存。分级校验:
+        //    - 写入 30 分钟内的: 直接信, 免校验(QQ 直链 vkey 通常数小时有效)
+        //    - 写入超过 30 分钟的: 并行校验链接有效性, 有效即返回, 无效丢弃重取
+        //    不再定时删除, 用"请求时校验"兜底。
         let urls = {};
         let actualQuality = requestedQuality;
         let pendingMids = mids;
+        const FRESH_SECONDS = 1800; // 30 分钟
         if (env.DB) {
             try {
                 await ensureUrlCacheTable(env.DB);
                 const cached = await getCachedUrls(env.DB, mids, requestedQuality);
+                const now = Math.floor(Date.now() / 1000);
                 const hitMids = [];
-                for (const mid of mids) {
+                let hits = 0, misses = 0;
+                // 并行处理每个 mid: 新鲜的直接信, 老的才校验
+                const decisions = await Promise.all(mids.map(async function(mid){
                     const c = cached[mid];
-                    if (c && c.url) {
-                        urls[mid] = c.url;
-                        actualQuality = c.quality || actualQuality;
-                        hitMids.push(mid);
+                    if (!c || !c.url) return { mid: mid, ok: false };
+                    const age = now - (c.createdAt || 0);
+                    if (age < FRESH_SECONDS) {
+                        return { mid: mid, ok: true, url: c.url, quality: c.quality };
+                    }
+                    const ok = await validateUrl(c.url);
+                    return { mid: mid, ok: ok, url: c.url, quality: c.quality };
+                }));
+                for (const d of decisions) {
+                    if (d.ok) {
+                        urls[d.mid] = d.url;
+                        actualQuality = d.quality || actualQuality;
+                        hitMids.push(d.mid);
+                        hits++;
+                    } else {
+                        misses++;
                     }
                 }
+                if (hits) { try { await recordCacheHit(env.DB, hits); } catch (e) {} }
+                if (misses) { try { await recordCacheMiss(env.DB, misses); } catch (e) {} }
                 if (hitMids.length) {
                     pendingMids = mids.filter(function(m){ return hitMids.indexOf(m) < 0; });
                 }
                 if (pendingMids.length === 0) {
-                    // 全部命中缓存, 直接返回, 不打上游
+                    // 全部命中且校验通过, 直接返回, 不打上游
                     return jsonResponse({ code: 0, data: urls, quality: actualQuality, cached: true });
                 }
             } catch (e) {
@@ -166,14 +187,12 @@ export async function onRequest(context) {
             }
         }
 
-        // 回写缓存(仅缓存非空链接)
+        // 回写缓存(仅缓存非空链接), 并行写入减少串行等待
         if (env.DB) {
             try {
-                for (const mid of reqMids) {
-                    if (urls[mid]) {
-                        await saveCachedUrl(env.DB, mid, requestedQuality, urls[mid], actualQuality);
-                    }
-                }
+                await Promise.all(reqMids
+                    .filter(function(mid){ return !!urls[mid]; })
+                    .map(function(mid){ return saveCachedUrl(env.DB, mid, requestedQuality, urls[mid], actualQuality); }));
             } catch (e) {
                 console.error("写入链接缓存失败:", e);
             }

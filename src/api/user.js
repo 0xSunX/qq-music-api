@@ -12,6 +12,7 @@ import {
     publicUser,
     getUsageToday,
     recordAppOpen,
+    checkRegisterRate,
 } from "../lib/user.js";
 
 export async function onRequest(context) {
@@ -28,7 +29,18 @@ export async function onRequest(context) {
     try {
         if (action === "register") {
             if (request.method !== "POST") return errorResponse("Method not allowed", 405);
-            const body = await request.json();
+            // 注册限速: 同一 IP 每小时最多 5 次, 防止批量刷注册
+            const ip = (request.headers.get("CF-Connecting-IP")
+                || (request.headers.get("X-Forwarded-For") || "").split(",")[0].trim()
+                || "unknown");
+            const allowed = await checkRegisterRate(env.DB, ip, 5, 3600);
+            if (!allowed) return errorResponse("注册过于频繁, 请稍后再试", 429);
+            let body;
+            try {
+                body = await request.json();
+            } catch (e) {
+                return errorResponse("请求体需为合法 JSON", 400);
+            }
             const id = await registerUser(env.DB, body.username, body.password, body.deviceId);
             return jsonResponse({ code: 0, message: "注册成功", userId: id });
         }

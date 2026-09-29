@@ -78,8 +78,12 @@ export async function onRequest(context) {
         }
     }
 
-    // GET - 显示页面
+    // GET - 状态探测 / 显示页面
     const inited = await isInitialized(env.DB);
+    // ?status=1 只返回 JSON, 供控制台登录门前置判断, 不返回 HTML
+    if (new URL(request.url).searchParams.get("status") === "1") {
+        return jsonResponse({ code: 0, initialized: inited });
+    }
     return new Response(generateHtml(inited), {
         headers: { "Content-Type": "text/html; charset=utf-8" },
     });
