@@ -24,7 +24,7 @@ import * as adminPage from "./api/admin/page.js";
 import * as adminCache from "./api/admin/cache.js";
 import * as setup from "./api/setup.js";
 import { ensureStatsTable, incrementCount, getTotalCount, getAllStats } from "./lib/stats.js";
-import { ensureUserTables, verifySession, reserveUsage, releaseUsage, countUsage, checkIpRate } from "./lib/user.js";
+import { ensureUserTables, verifySession, reserveUsage, releaseUsage, countUsage, checkIpRate, VIP_DAILY_LIMIT } from "./lib/user.js";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -59,7 +59,7 @@ const routes = {
 
 // 免鉴权的公开路由(register/login 额外豁免)
 // /admin 是控制台页面, 前端密码登录; /admin/users 复用同一 token
-const PUBLIC_ROUTES = ["/admin", "/admin/users", "/admin/cache", "/api/setup", "/api/app/update", "/api/app/notice", "/api/search"];
+const PUBLIC_ROUTES = ["/admin", "/admin/users", "/admin/cache", "/api/setup", "/api/app/update", "/api/app/notice", "/api/search", "/api/top"];
 // 需 admin 角色的数据接口(登录后仍要校验角色, 统一以 [admin] 前缀标注)
 const ADMIN_ROUTES = ["/api/admin/users", "/api/admin/credential", "/api/admin/appconfig", "/api/admin/cache"];
 
@@ -374,10 +374,10 @@ function generateConsoleHtml(totalCount) {
     <div class="e" id="doc-register"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=register</span></div><p class="d">注册账号(同一设备仅能注册一个)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">username</span><span class="r">*</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span><span class="r">*</span></td><td>string</td><td>至少 6 位</td></tr><tr><td><span class="pm">deviceId</span><span class="r">*</span></td><td>string</td><td>设备指纹</td></tr></table><div class="ex">POST /api/user?action=register{ "username":"test", "password":"123456", "deviceId":"abc123" }</div><p class="d">注册用户均为普通用户, 管理员需通过 /api/setup 初始化创建</p></div>
     <div class="e" id="doc-login"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=login</span></div><p class="d">登录, 返回 token 用于后续接口鉴权</p><div class="ex">POST /api/user?action=login{ "username":"test", "password":"123456", "deviceId":"abc123" }</div><p class="d">返回 token, 后续请求头带: Authorization: Bearer 你的token</p></div>
     <div class="e" id="doc-logout"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=logout</span></div><p class="d">登出, 注销当前 token</p></div>
-    <div class="e" id="doc-me"><div class="h"><span class="m">GET</span><span class="p">/api/user?action=me</span></div><p class="d">查询当前用户信息与今日用量(需 token)</p><div class="ex">GET /api/user?action=meAuthorization: Bearer 你的token</div><p class="d">返回字段: code / user / usageToday(今日已用) / remaining(vip 为 -1)</p></div>
+    <div class="e" id="doc-me"><div class="h"><span class="m">GET</span><span class="p">/api/user?action=me</span></div><p class="d">查询当前用户信息与今日用量(需 token)</p><div class="ex">GET /api/user?action=meAuthorization: Bearer 你的token</div><p class="d">返回字段: code / user / usageToday(今日已用) / remaining(管理员为 -1, 会员为 1000 剩余)</p></div>
     <div class="e" id="doc-appopen"><div class="h"><span class="m">POST</span><span class="p">/api/user?action=appopen</span></div><p class="d">记录一次 APP 打开(需 token, 用于用户管理页统计展示)</p><div class="ex">POST /api/user?action=appopenAuthorization: Bearer 你的token</div><p class="d">返回字段: code / message</p></div>
     <h2>用户规则</h2>
-    <div class="e"><table><tr><th>等级</th><th>调用限制</th><th>说明</th></tr><tr><td><span class="tag tag-normal" style="padding:2px 8px;border-radius:4px;background:#333;color:#aaa">普通用户 normal</span></td><td>每日 50 次(可被管理员调整)</td><td>仅音乐业务类接口计入日限额, 超出返回 429</td></tr><tr><td><span class="tag tag-vip" style="padding:2px 8px;border-radius:4px;background:#f0a020;color:#000">VIP 用户 vip</span></td><td>无限制</td><td>不限调用次数</td></tr><tr><td><span class="tag" style="padding:2px 8px;border-radius:4px;background:#31c27c;color:#000">管理员 admin</span></td><td>无限制(日限额 100000)</td><td>可访问 /api/admin/* 管理接口</td></tr></table><p class="d">鉴权规则: 公开端点(无需 token)为 /api/user?action=register|login(注册/登录)、/api/search(搜索, 按 IP 限流 30 次/分钟)、/api/setup(站点初始化)、/api/app/update(APP更新配置) 与 /api/app/notice(APP公告); 其余 /api/ 接口均需请求头 Authorization: Bearer 你的token; /api/admin/*(用户管理、凭证管理、APP配置调试)额外要求账号 role=admin。</p><p class="d">说明: 面向普通用户的读取凭证接口(/api/credential)已下线, 凭证仅可通过管理员接口查看/写入; 客户端探活请改用 /api/user?action=me 返回的 remaining 字段。</p></div>
+    <div class="e"><table><tr><th>等级</th><th>调用限制</th><th>说明</th></tr><tr><td><span class="tag tag-normal" style="padding:2px 8px;border-radius:4px;background:#333;color:#aaa">普通用户 normal</span></td><td>每日 50 次(可被管理员调整)</td><td>仅音乐业务类接口计入日限额, 超出返回 429</td></tr><tr><td><span class="tag tag-vip" style="padding:2px 8px;border-radius:4px;background:#f0a020;color:#000">会员 vip</span></td><td>每日 1000 次</td><td>超出日限额返回 429</td></tr><tr><td><span class="tag" style="padding:2px 8px;border-radius:4px;background:#31c27c;color:#000">管理员 admin</span></td><td>无限制</td><td>可访问 /api/admin/* 管理接口</td></tr></table><p class="d">鉴权规则: 公开端点(无需 token)为 /api/user?action=register|login(注册/登录)、/api/search(搜索, 按 IP 限流 30 次/分钟)、/api/top(排行榜, 按 IP 限流 30 次/分钟)、/api/setup(站点初始化)、/api/app/update(APP更新配置) 与 /api/app/notice(APP公告); 其余 /api/ 接口均需请求头 Authorization: Bearer 你的token; /api/admin/*(用户管理、凭证管理、APP配置调试)额外要求账号 role=admin。</p><p class="d">说明: 面向普通用户的读取凭证接口(/api/credential)已下线, 凭证仅可通过管理员接口查看/写入; 客户端探活请改用 /api/user?action=me 返回的 remaining 字段。</p></div>
     <h2>管理接口</h2>
     <h3>用户管理</h3>
     <div class="e" id="doc-adminusers-list"><div class="h"><span class="m">GET</span><span class="p">/api/admin/users?action=list</span></div><p class="d">[admin] 用户列表(支持 keyword 全库前缀搜索)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 list</td></tr><tr><td><span class="pm">page</span></td><td>int</td><td>页码,默认 1</td></tr><tr><td><span class="pm">size</span></td><td>int</td><td>每页条数,默认 20,最大 100</td></tr><tr><td><span class="pm">keyword</span></td><td>string</td><td>可选, 按用户名前缀或用户ID精确全库搜索</td></tr></table><div class="ex">GET /api/admin/users?action=list&page=1&size=20&keyword=adminAuthorization: Bearer 管理员token</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">page</span></td><td>当前页码</td></tr><tr><td><span class="pm">size</span></td><td>本页条数</td></tr><tr><td><span class="pm">total</span></td><td>用户总数</td></tr><tr><td><span class="pm">list</span></td><td>用户数组(id/username/level/role/status/dailyLimit/createdAt)</td></tr></table></div>
@@ -390,7 +390,7 @@ function generateConsoleHtml(totalCount) {
     <div class="e" id="doc-admincred"><div class="h"><span class="m">GET</span><span class="p">/api/admin/credential</span></div><p class="d">[admin] 查看凭证完整状态(不脱敏, 已剔除 refresh_key)</p><div class="ex">GET /api/admin/credential</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">credential</span></td><td>完整凭证对象(musicid/musickey/refresh_token/openid 等字段, 已剔除 refresh_key); 无凭证时为 null</td></tr></table></div>
     <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/credential</span></div><p class="d">[admin] 更新 QQ 音乐凭证</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">musicid</span><span class="r">*</span></td><td>string</td><td>音乐账号ID</td></tr><tr><td><span class="pm">musickey</span><span class="r">*</span></td><td>string</td><td>音乐密钥</td></tr><tr><td><span class="pm">credential</span></td><td>object</td><td>也可整体包在 credential 字段里</td></tr></table><div class="ex">POST /api/admin/credential{ "musicid":"xxx", "musickey":"xxx" }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">success</span></td><td>true 表示写入成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">musicid</span></td><td>已保存的音乐账号ID</td></tr></table></div>
     <h3>站点初始化</h3>
-    <div class="e" id="doc-setup"><div class="h"><span class="m">GET/POST</span><span class="p">/api/setup</span></div><p class="d">站点初始化: GET 查看状态, POST 清库并创建初始管理员(检测到已有 admin 即锁定, 管理员默认 vip 且日限额 100000)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">username</span><span class="r">*</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span><span class="r">*</span></td><td>string</td><td>至少 6 位</td></tr></table><div class="ex">POST /api/setup{ "username":"admin", "password":"******" }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">adminId</span></td><td>新建管理员用户ID</td></tr><tr><td><span class="pm">username</span></td><td>管理员用户名</td></tr></table></div>
+    <div class="e" id="doc-setup"><div class="h"><span class="m">GET/POST</span><span class="p">/api/setup</span></div><p class="d">站点初始化: GET 查看状态, POST 清库并创建初始管理员(检测到已有 admin 即锁定, 管理员等级为「管理员」且不限调用)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">username</span><span class="r">*</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span><span class="r">*</span></td><td>string</td><td>至少 6 位</td></tr></table><div class="ex">POST /api/setup{ "username":"admin", "password":"******" }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">adminId</span></td><td>新建管理员用户ID</td></tr><tr><td><span class="pm">username</span></td><td>管理员用户名</td></tr></table></div>
     <h3>管理页面</h3>
     <div class="e"><div class="h"><span class="m">PAGE</span><span class="p">/admin/users</span></div><p class="d">图形化管理后台, 填入管理员 token 后可增删改查用户</p><div class="ex"><a href="/admin/users" style="color:#31c27c">打开用户管理后台 →</a></div></div>
     <footer><a href="https://isunc.com">文档</a> · <a href="https://github.com/0xSunX/qq-music-api">GitHub</a> · © iSun</footer>
@@ -750,15 +750,17 @@ export default {
                         headers: { "Content-Type": "application/json", ...corsHeaders },
                     });
                 }
-                // 统计端点: 普通用户限流+计数, VIP/管理员只计数(不限流)
+                // 统计端点: 管理员豁免限流(仅计数), 普通/VIP 用户按各自日限额限流+计数
                 if (statsEndpoints.includes(path)) {
-                    if (currentUser.level !== "vip") {
-                        // 普通用户: 原子占用配额(检查+递增), 业务失败再回滚
-                        const ok = await reserveUsage(env.DB, currentUser.id, currentUser.daily_limit);
+                    if (currentUser.role !== "admin") {
+                        // 普通用户用其 daily_limit; VIP 用户固定 VIP_DAILY_LIMIT
+                        const limit = currentUser.level === "vip" ? VIP_DAILY_LIMIT : currentUser.daily_limit;
+                        // 原子占用配额(检查+递增), 业务失败再回滚
+                        const ok = await reserveUsage(env.DB, currentUser.id, limit);
                         if (!ok) {
                             return new Response(JSON.stringify({
                                 error: "Daily limit reached",
-                                limit: currentUser.daily_limit,
+                                limit: limit,
                             }), {
                                 status: 429,
                                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -766,7 +768,7 @@ export default {
                         }
                         usageReserved = true;
                     } else {
-                        // VIP/管理员: 不限流, 但一样计入调用统计; 业务失败不回滚
+                        // 管理员: 不限流, 但一样计入调用统计; 业务失败不回滚
                         try { await countUsage(env.DB, currentUser.id); } catch (e) { console.error("计数失败:", e); }
                     }
                 }

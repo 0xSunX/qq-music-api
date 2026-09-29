@@ -13,6 +13,7 @@ import {
     getUsageToday,
     recordAppOpen,
     checkRegisterRate,
+    VIP_DAILY_LIMIT,
 } from "../lib/user.js";
 
 export async function onRequest(context) {
@@ -72,7 +73,7 @@ export async function onRequest(context) {
                 code: 0,
                 user: publicUser(user),
                 usageToday: used,
-                remaining: user.level === "vip" ? -1 : Math.max(0, user.daily_limit - used),
+                remaining: user.role === "admin" ? -1 : Math.max(0, (user.level === "vip" ? VIP_DAILY_LIMIT : user.daily_limit) - used),
             });
         }
 

@@ -97,7 +97,7 @@ tr:hover{background:#222}
     <div class="field"><label>重置密码 (留空不改)</label><input id="ePass" placeholder="不修改请留空"></div>
     <div class="field"><label>日限额</label><input id="eLimit" type="number"></div>
     <div class="field"><label>等级</label>
-      <select id="eLevel"><option value="normal">normal</option><option value="vip">vip</option></select></div>
+      <select id="eLevel"><option value="normal">普通用户</option><option value="vip">会员</option></select></div>
     <div class="field"><label>状态</label>
       <select id="eStatus"><option value="1">正常</option><option value="0">禁用</option></select></div>
     <div class="btns">
@@ -159,10 +159,11 @@ function renderRows(list){
     var tr = document.createElement('tr');
     tr.appendChild(td(u.id));
     tr.appendChild(td(u.username));
-    var tdl = td(''); tdl.appendChild(tag(u.level, u.level === 'vip' ? 'tag-vip' : 'tag-normal')); tr.appendChild(tdl);
+    var lvLabel = u.level === 'vip' ? '会员' : (u.level === 'normal' ? '普通用户' : u.level);
+    var tdl = td(''); tdl.appendChild(tag(lvLabel, u.level === 'vip' ? 'tag-vip' : 'tag-normal')); tr.appendChild(tdl);
     tr.appendChild(td(u.role));
     var tds = td(''); tds.appendChild(tag(u.status === 1 ? '正常' : '禁用', u.status === 1 ? 'tag-on' : 'tag-off')); tr.appendChild(tds);
-    tr.appendChild(td(u.level === 'vip' ? '∞' : u.dailyLimit));
+    tr.appendChild(td(u.role === 'admin' ? '∞' : (u.level === 'vip' ? 1000 : u.dailyLimit)));
     tr.appendChild(td((u.apiToday || 0) + ' / ' + (u.apiTotal || 0)));
     tr.appendChild(td((u.appOpenToday || 0) + ' / ' + (u.appOpenTotal || 0)));
     var tdop = document.createElement('td');
@@ -170,7 +171,7 @@ function renderRows(list){
       var sp = document.createElement('span'); sp.style.color = '#666'; sp.style.fontSize = '.75rem'; sp.textContent = '管理员不可操作'; tdop.appendChild(sp);
     } else {
       tdop.appendChild(mkBtn('编辑', 'ghost', function(){ openEdit(u.id); }));
-      var vipBtn = mkBtn('VIP', u.level === 'vip' ? 'vip-on' : 'vip-off', function(){ setLevel(u.id, u.level === 'vip' ? 'normal' : 'vip'); });
+      var vipBtn = mkBtn(u.level === 'vip' ? '取消会员' : '设为会员', u.level === 'vip' ? 'vip-on' : 'vip-off', function(){ setLevel(u.id, u.level === 'vip' ? 'normal' : 'vip'); });
       tdop.appendChild(vipBtn);
       tdop.appendChild(mkBtn(u.status === 1 ? '禁用' : '启用', 'ghost', function(){ setStatus2(u.id, u.status === 1 ? 0 : 1); }));
       tdop.appendChild(mkBtn('删除', 'danger', function(){ delUser(u.id, u.username); }));

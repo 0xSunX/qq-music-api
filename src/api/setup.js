@@ -61,7 +61,7 @@ export async function onRequest(context) {
             const adminDevice = "setup-" + randomHex(8);
             const r = await env.DB.prepare(
                 `INSERT INTO users (username, password_hash, salt, role, level, device_id, daily_limit, created_at, updated_at)
-                 VALUES (?, ?, ?, 'admin', 'vip', ?, 100000, ?, ?)`
+                 VALUES (?, ?, ?, 'admin', '管理员', ?, 100000, ?, ?)`
             ).bind(username, hash, salt, adminDevice, now, now).run();
 
             const resp = {

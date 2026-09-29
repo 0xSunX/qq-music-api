@@ -5,6 +5,8 @@
 const PBKDF2_ITER = 100000;
 const SESSION_TTL = 30 * 24 * 3600;   // 30 天
 const DEFAULT_DAILY_LIMIT = 50;
+// VIP 用户固定日限额(不随 users.daily_limit 字段变化)
+export const VIP_DAILY_LIMIT = 1000;
 
 // ---------- 工具 ----------
 
