@@ -80,9 +80,9 @@ h1{font-size:1.4rem;margin-bottom:16px;color:#31c27c}
 .card .l{color:#888;font-size:.8rem;margin-top:6px}
 .bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
 .bar input{flex:1;min-width:160px;background:#222;border:1px solid #333;color:#e0e0e0;border-radius:4px;padding:8px;font-family:monospace}
-.bar button{cursor:pointer;background:#31c27c;color:#000;border:none;border-radius:4px;padding:8px 16px;font-weight:600}
+.bar button{cursor:pointer;background:#2a2a2a;color:#e0e0e0;border:1px solid #444;border-radius:4px;padding:8px 16px;font-weight:600;transition:background .15s,border-color .15s}
+.bar button:hover{background:#333;border-color:#31c27c}
 .bar button.ghost{background:#2a2a2a;color:#e0e0e0;border:1px solid #444}
-.bar button.danger{background:#7a2a2a;color:#fff}
 table{width:100%;border-collapse:collapse;font-size:.82rem}
 th,td{padding:8px;text-align:left;border-bottom:1px solid #2a2a2a}
 th{color:#888;font-weight:500}
@@ -134,14 +134,13 @@ tr:hover{background:#222}
     <div class="chart"><h3>缓存条目 Top MID</h3><div id="chartTop"><div class="empty">暂无数据</div></div></div>
   </div>
   <div class="bar">
-    <input id="token" placeholder="粘贴管理员 Token">
     <input id="kw" placeholder="按 mid / URL 搜索">
     <button id="load">加载</button>
-    <button id="clear" class="danger">清空缓存</button>
+    <button id="clear">清空缓存</button>
     <button id="resetmem" class="ghost">重置内存统计</button>
     <button id="back" class="ghost">返回上一页</button>
   </div>
-  <div id="status">请填入 Token 后加载</div>
+  <div id="status">就绪</div>
   <table id="tbl" style="display:none">
     <thead><tr><th>MID</th><th>请求音质</th><th>命中音质</th><th>链接</th><th>写入时间</th><th>操作</th></tr></thead>
     <tbody id="rows"></tbody>
@@ -153,11 +152,11 @@ tr:hover{background:#222}
 <script>
 (function(){
   var PAGE=1, SIZE=20;
-  var tokenEl=document.getElementById('token'), kwEl=document.getElementById('kw');
+  var token=localStorage.getItem('adminToken')||'', kwEl=document.getElementById('kw');
   var statusEl=document.getElementById('status'), rowsEl=document.getElementById('rows');
   var tblEl=document.getElementById('tbl'), pagerEl=document.getElementById('pager'), pageinfoEl=document.getElementById('pageinfo');
   function getDeviceId(){ var k='mtDeviceId', v=localStorage.getItem(k); if(!v){ v='web-'+Math.random().toString(36).slice(2,10)+Date.now().toString(36); localStorage.setItem(k,v);} return v; }
-  function api(qs, opts){ var url='/api/admin/cache?'+qs; var t=tokenEl.value.trim(); var init=opts||{}; init.headers=Object.assign({'Authorization':'Bearer '+t,'Content-Type':'application/json','X-Device-Id':getDeviceId()}, init.headers||{}); return fetch(url,init).then(function(r){ return r.json().then(function(d){ return {ok:r.ok,status:r.status,data:d}; }); }); }
+  function api(qs, opts){ var url='/api/admin/cache?'+qs; var t=token.trim(); var init=opts||{}; init.headers=Object.assign({'Authorization':'Bearer '+t,'Content-Type':'application/json','X-Device-Id':getDeviceId()}, init.headers||{}); return fetch(url,init).then(function(r){ return r.json().then(function(d){ return {ok:r.ok,status:r.status,data:d}; }); }); }
   function setStatus(m,e){ statusEl.textContent=m; statusEl.style.color=e?'#f44':'#888'; }
   function fmtTime(ts){ if(!ts) return '-'; return new Date(ts*1000).toLocaleString(); }
   function loadStats(){ api('action=stats',{method:'GET'}).then(function(res){ if(!res.ok) return; var s=res.data.stats||{}; document.getElementById('cHitRate').textContent=(s.hitRate||0)+'%'; document.getElementById('cHits').textContent=s.hits||0; document.getElementById('cMisses').textContent=s.misses||0; document.getElementById('cCount').textContent=s.count||0; document.getElementById('mHitRate').textContent=(s.memHitRate||0)+'%'; document.getElementById('mSaved').textContent=s.savedD1||0; document.getElementById('mHits').textContent=s.memHits||0; document.getElementById('mMisses').textContent=s.memMisses||0; document.getElementById('mSize').textContent=s.memSize||0; }); }
@@ -188,7 +187,7 @@ tr:hover{background:#222}
       drawBars('chartTop', d.topMids||[]);
     });
   }
-  function loadList(){ if(!tokenEl.value.trim()){ setStatus('请先填入 Token',true); return; } setStatus('加载中...'); api('action=list&page='+PAGE+'&size='+SIZE+'&keyword='+encodeURIComponent(kwEl.value.trim()),{method:'GET'}).then(function(res){ if(!res.ok){ setStatus('加载失败: '+(res.data.error||res.status),true); return; } var d=res.data, list=d.list||[]; if(list.length===0){ setStatus('暂无缓存'); tblEl.style.display='none'; pagerEl.style.display='none'; return; } renderRows(list); tblEl.style.display=''; pagerEl.style.display=''; var tp=Math.ceil(d.total/SIZE)||1; pageinfoEl.textContent='第 '+PAGE+' / '+tp+' 页 · 共 '+d.total+' 条'; setStatus('就绪'); }); }
+  function loadList(){ setStatus('加载中...'); api('action=list&page='+PAGE+'&size='+SIZE+'&keyword='+encodeURIComponent(kwEl.value.trim()),{method:'GET'}).then(function(res){ if(!res.ok){ setStatus('加载失败: '+(res.data.error||res.status),true); return; } var d=res.data, list=d.list||[]; if(list.length===0){ setStatus('暂无缓存'); tblEl.style.display='none'; pagerEl.style.display='none'; return; } renderRows(list); tblEl.style.display=''; pagerEl.style.display=''; var tp=Math.ceil(d.total/SIZE)||1; pageinfoEl.textContent='第 '+PAGE+' / '+tp+' 页 · 共 '+d.total+' 条'; setStatus('就绪'); }); }
   function renderRows(list){ rowsEl.innerHTML=''; list.forEach(function(r){ var tr=document.createElement('tr'); function td(t,c){ var e=document.createElement('td'); if(c)e.className=c; e.textContent=t; return e; } tr.appendChild(td(r.mid,'mono')); tr.appendChild(td(r.quality||'')); tr.appendChild(td(r.actual_quality||'')); var tdu=document.createElement('td'); var u=document.createElement('span'); u.className='url'; u.title=r.url; u.textContent=r.url; tdu.appendChild(u); tr.appendChild(tdu); tr.appendChild(td(fmtTime(r.created_at))); var tdo=document.createElement('td'); var b=document.createElement('button'); b.className='act danger'; b.textContent='删除'; b.onclick=function(){ if(!confirm('删除这条缓存?')) return; api('action=delete',{method:'POST',body:JSON.stringify({cacheKey:r.cache_key})}).then(function(res){ if(!res.ok){ setStatus('删除失败: '+(res.data.error||res.status),true); return; } setStatus('已删除'); loadList(); loadStats(); }); }; tdo.appendChild(b); tr.appendChild(tdo); rowsEl.appendChild(tr); }); }
   document.getElementById('load').onclick=function(){ PAGE=1; loadStats(); loadDist(); loadList(); };
   document.getElementById('prev').onclick=function(){ if(PAGE>1){ PAGE--; loadList(); } };
@@ -200,11 +199,9 @@ tr:hover{background:#222}
     searchTimer=setTimeout(function(){ PAGE=1; loadList(); }, 300);
   });
   document.getElementById('back').onclick=function(){ location.href='/admin'; };
-  document.getElementById('clear').onclick=function(){ if(!tokenEl.value.trim()){ setStatus('请先填入 Token',true); return; } if(!confirm('确定清空全部缓存? 不可恢复')) return; api('action=clear',{method:'POST',body:'{}'}).then(function(res){ if(!res.ok){ setStatus('清空失败: '+(res.data.error||res.status),true); return; } setStatus('缓存已清空'); PAGE=1; loadList(); loadStats(); }); };
+  document.getElementById('clear').onclick=function(){ if(!confirm('确定清空全部缓存? 不可恢复')) return; api('action=clear',{method:'POST',body:'{}'}).then(function(res){ if(!res.ok){ setStatus('清空失败: '+(res.data.error||res.status),true); return; } setStatus('缓存已清空'); PAGE=1; loadList(); loadStats(); }); };
   document.getElementById('resetmem').onclick=function(){ if(!confirm('重置本实例内存层统计计数? (不影响缓存内容)')) return; api('action=resetmem',{method:'POST',body:'{}'}).then(function(res){ if(!res.ok){ setStatus('重置失败: '+(res.data.error||res.status),true); return; } setStatus('内存统计已重置'); loadStats(); }); };
-  tokenEl.value=localStorage.getItem('adminToken')||'';
-  tokenEl.addEventListener('change',function(){ localStorage.setItem('adminToken',tokenEl.value.trim()); });
-  if(tokenEl.value.trim()){ loadStats(); loadDist(); loadList(); } else { setStatus('未登录, 请先填入 Token',true); }
+  if(token){ loadStats(); loadDist(); loadList(); } else { setStatus('未登录, 请先到 /admin 登录',true); }
 })();
 </script>
 </body>

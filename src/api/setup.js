@@ -69,7 +69,8 @@ export async function onRequest(context) {
             }
 
             // 清空所有业务表(逐表执行, 失败记录到 warnings, 不再静默吞掉)
-            const tables = ["credentials", "sessions", "usage_daily", "users", "api_stats", "app_open_daily", "url_cache", "url_cache_stats", "app_notices", "app_releases", "register_rate", "ip_rate", "login_rate", "device_registry"];
+            // 覆盖全部业务表, 含风控/签名相关表; 新表必须同步加入, 否则初始化后残留旧数据
+            const tables = ["credentials", "sessions", "usage_daily", "users", "api_stats", "app_open_daily", "url_cache", "url_cache_stats", "app_notices", "app_releases", "register_rate", "ip_rate", "login_rate", "device_registry", "risk_config", "risk_rate", "risk_mid", "risk_block", "risk_events", "req_nonce"];
             const warnings = [];
             for (const t of tables) {
                 try { await env.DB.prepare("DELETE FROM " + t).run(); }
@@ -87,6 +88,12 @@ export async function onRequest(context) {
                 `INSERT INTO users (username, password_hash, salt, role, level, device_id, daily_limit, created_at, updated_at)
                  VALUES (?, ?, ?, 'admin', 'vip', ?, 100000, ?, ?)`
             ).bind(username, hash, salt, adminDevice, now, now).run();
+
+            // 重建单行表默认数据: 上方清库清掉了行, 不重建会导致相关 UPDATE 命中 0 行而静默失效
+            // 1) risk_config: 后台保存风控参数 UPDATE ... WHERE id=1
+            try { await env.DB.prepare("INSERT OR IGNORE INTO risk_config (id) VALUES (1)").run(); } catch (_) {}
+            // 2) url_cache_stats: 缓存命中/未命中统计 UPDATE ... WHERE id=1
+            try { await env.DB.prepare("INSERT OR IGNORE INTO url_cache_stats (id, hits, misses) VALUES (1, 0, 0)").run(); } catch (_) {}
 
             const resp = {
                 code: 0,
@@ -110,7 +117,7 @@ export async function onRequest(context) {
     const inited = await isInitialized(env.DB);
     // ?status=1 只返回 JSON, 供控制台登录门前置判断, 不返回 HTML
     if (new URL(request.url).searchParams.get("status") === "1") {
-        return jsonResponse({ code: 0, initialized: inited });
+        return jsonResponse({ code: 0, initialized: inited, setupKeyConfigured: !!env.SETUP_KEY });
     }
     return new Response(generateHtml(inited), {
         headers: { "Content-Type": "text/html; charset=utf-8" },
@@ -171,15 +178,39 @@ button:disabled{background:#333;color:#666;cursor:not-allowed}
   var msg=document.getElementById('msg');
   var go=document.getElementById('go');
   function setMsg(t,c){ msg.textContent=t; msg.style.color=c||'#888'; }
+  // 初始化密钥输入框 (动态插入, 避开手写 HTML 转义)
+  var kField=document.createElement('div');
+  kField.className='field';
+  var kLabel=document.createElement('label');
+  kLabel.textContent='初始化密钥 (SETUP_KEY)';
+  var kInput=document.createElement('input');
+  kInput.id='k';
+  kInput.type='password';
+  kInput.placeholder='填入服务端配置的 SETUP_KEY';
+  kInput.setAttribute('autocomplete','off');
+  kField.appendChild(kLabel);
+  kField.appendChild(kInput);
+  go.parentNode.insertBefore(kField, go);
+  // 探测服务端是否配置 SETUP_KEY, 未配置直接提示并禁用按钮
+  fetch('/api/setup?status=1').then(function(r){ return r.json(); }).then(function(d){
+    if(d && d.setupKeyConfigured === false){
+      kInput.disabled = true;
+      go.disabled = true;
+      go.textContent = '初始化入口已禁用';
+      setMsg('服务端未配置 SETUP_KEY, 初始化入口已禁用; 请先在 Cloudflare 添加该 Secret','#f44');
+    }
+  }).catch(function(){});
   go.onclick=function(){
     var u=document.getElementById('u').value.trim();
     var p=document.getElementById('p').value;
     var p2=document.getElementById('p2').value;
     if(!u||!p){ setMsg('请填写用户名和密码','#f44'); return; }
     if(p!==p2){ setMsg('两次密码不一致','#f44'); return; }
+    var k=document.getElementById('k').value.trim();
+    if(!k){ setMsg('请填写初始化密钥 SETUP_KEY','#f44'); return; }
     if(!confirm('确认清空所有数据并创建管理员 '+u+' ?')) return;
     go.disabled=true; setMsg('初始化中...');
-    fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})})
+    fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json','X-Setup-Key':k},body:JSON.stringify({username:u,password:p})})
     .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
     .then(function(res){
       if(!res.ok){ setMsg('失败: '+(res.d.error||'未知'),'#f44'); go.disabled=false; return; }

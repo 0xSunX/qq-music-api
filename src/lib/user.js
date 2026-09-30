@@ -9,6 +9,14 @@ const SESSION_TTL = 30 * 24 * 3600;   // 30 天
 const DEFAULT_DAILY_LIMIT = 50;
 // VIP 用户固定日限额(不随 users.daily_limit 字段变化)
 export const VIP_DAILY_LIMIT = 1000;
+// 普通用户默认最高音质(可被 users.max_quality 覆盖)
+export const DEFAULT_MAX_QUALITY = '320';
+// 音质由低到高排序, 用于比较用户音质上限与请求音质
+export const QUALITY_LEVELS = ['128', '320', 'flac', 'atmos_51', 'atmos_2', 'master'];
+export function qualityRank(q) {
+    const i = QUALITY_LEVELS.indexOf(String(q || '').toLowerCase());
+    return i < 0 ? -1 : i;
+}
 
 // ---------- 工具 ----------
 
@@ -51,9 +59,12 @@ export async function ensureUserTables(db) {
         status INTEGER DEFAULT 1,
         device_id TEXT NOT NULL,
         daily_limit INTEGER DEFAULT 50,
+        max_quality TEXT DEFAULT '320',
         created_at INTEGER,
         updated_at INTEGER
     )`).run();
+    // 兼容旧库: 补充 max_quality 列(普通用户最高音质上限, VIP/管理员不受此限)
+    try { await db.prepare("ALTER TABLE users ADD COLUMN max_quality TEXT DEFAULT '320'").run(); } catch (e) { /* 列已存在 */ }
     await db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_device ON users(device_id)`).run();
     // username 索引: 支撑全库搜索的前缀匹配 (LIKE 'kw%'), 避免 %kw% 全表扫
     await db.prepare(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`).run();
@@ -361,6 +372,7 @@ export function publicUser(u) {
         role: u.role,
         status: u.status,
         dailyLimit: u.daily_limit,
+        maxQuality: u.max_quality || DEFAULT_MAX_QUALITY,
         createdAt: u.created_at,
     };
 }
@@ -506,6 +518,7 @@ export function adminUser(u) {
         role: u.role,
         status: u.status,
         dailyLimit: u.daily_limit,
+        maxQuality: u.max_quality || DEFAULT_MAX_QUALITY,
         deviceId: u.device_id,
         createdAt: u.created_at,
         updatedAt: u.updated_at,
@@ -554,6 +567,13 @@ export async function updateUserInfo(db, userId, fields = {}) {
         if (!Number.isInteger(lim) || lim < 1 || lim > 100000) throw new Error('日限额需为 1-100000 的整数');
         sets.push('daily_limit = ?');
         binds.push(lim);
+    }
+
+    if (fields.maxQuality !== undefined) {
+        const q = String(fields.maxQuality || '').toLowerCase();
+        if (QUALITY_LEVELS.indexOf(q) < 0) throw new Error('音质上限需为 ' + QUALITY_LEVELS.join('/') + ' 之一');
+        sets.push('max_quality = ?');
+        binds.push(q);
     }
 
     if (fields.level !== undefined) {

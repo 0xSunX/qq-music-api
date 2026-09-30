@@ -8,6 +8,7 @@ import { getGuid, parseQuality, SongFileType, API_CONFIG } from "../../lib/commo
 import { getCredential } from "../../lib/credential.js";
 import { generateSign } from "../../lib/sign.js";
 import { ensureUrlCacheTable, getCachedUrls, saveCachedUrl, validateUrl, recordCacheHit, recordCacheMiss } from "../../lib/urlcache.js";
+import { qualityRank, DEFAULT_MAX_QUALITY } from "../../lib/user.js";
 
 /**
  * 音质降级顺序
@@ -15,7 +16,7 @@ import { ensureUrlCacheTable, getCachedUrls, saveCachedUrl, validateUrl, recordC
 const QUALITY_FALLBACK = ["master", "atmos_2", "atmos_51", "flac", "320", "128"];
 
 export async function onRequest(context) {
-    const { request, env, ctx } = context;
+    const { request, env, ctx, user } = context;
 
     if (request.method === "OPTIONS") {
         return handleOptions();
@@ -112,8 +113,21 @@ export async function onRequest(context) {
         const credential = await getCredential(env);
         const domain = "https://isure.stream.qqmusic.qq.com/";
 
-        // 构建降级队列：从请求的音质开始
-        const startIndex = QUALITY_FALLBACK.indexOf(requestedQuality.toLowerCase());
+        // 音质权限: 普通用户受 max_quality 上限约束(超出则按上限取值); VIP/管理员不限制
+        let userMaxQuality = null;
+        if (user && user.role !== 'admin' && user.level !== 'vip') {
+            userMaxQuality = String(user.max_quality || DEFAULT_MAX_QUALITY).toLowerCase();
+        }
+        let startQuality = requestedQuality.toLowerCase();
+        if (userMaxQuality) {
+            const rReq = qualityRank(startQuality);
+            const rMax = qualityRank(userMaxQuality);
+            // 请求音质高于上限, 或请求了未知音质: 统一从上限音质开始降级
+            if (rMax >= 0 && (rReq < 0 || rReq > rMax)) startQuality = userMaxQuality;
+        }
+
+        // 构建降级队列：从实际允许的最高音质开始
+        const startIndex = QUALITY_FALLBACK.indexOf(startQuality);
         const qualityQueue = startIndex >= 0
             ? QUALITY_FALLBACK.slice(startIndex)
             : QUALITY_FALLBACK; // 如果请求的音质不在列表中，从 flac 开始

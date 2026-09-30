@@ -27,6 +27,14 @@ const DEFAULTS = {
     midScanPerMin: 60,
     blockSeconds: 900,
     autoBlock: 1,
+    // VIP 专属风控阈值: VIP 不限次数, 但仍受风控约束, 给更宽的阈值
+    vipBurstPerSec: 60,
+    vipBurstPerMin: 1200,
+    vipMidScanPerMin: 300,
+    // 匿名专属阈值: 匿名按 IP 聚合, NAT/基站共享 IP 易误伤, 故比普通用户更宽
+    anonBurstPerSec: 40,
+    anonBurstPerMin: 600,
+    anonMidScanPerMin: 120,
 };
 
 let _riskTablesEnsured = false;
@@ -113,6 +121,13 @@ export async function ensureRiskTables(db) {
         'auto_block INTEGER DEFAULT 1,' +
         'updated_at INTEGER)').run();
     await db.prepare('INSERT OR IGNORE INTO risk_config (id) VALUES (1)').run();
+    // 兼容旧库: 补充 VIP 专属风控阈值列
+    try { await db.prepare('ALTER TABLE risk_config ADD COLUMN vip_burst_per_sec INTEGER DEFAULT 60').run(); } catch (e) { /* 列已存在 */ }
+    try { await db.prepare('ALTER TABLE risk_config ADD COLUMN vip_burst_per_min INTEGER DEFAULT 1200').run(); } catch (e) { /* 列已存在 */ }
+    try { await db.prepare('ALTER TABLE risk_config ADD COLUMN vip_mid_scan_per_min INTEGER DEFAULT 300').run(); } catch (e) { /* 列已存在 */ }
+    try { await db.prepare('ALTER TABLE risk_config ADD COLUMN anon_burst_per_sec INTEGER DEFAULT 40').run(); } catch (e) { /* 列已存在 */ }
+    try { await db.prepare('ALTER TABLE risk_config ADD COLUMN anon_burst_per_min INTEGER DEFAULT 600').run(); } catch (e) { /* 列已存在 */ }
+    try { await db.prepare('ALTER TABLE risk_config ADD COLUMN anon_mid_scan_per_min INTEGER DEFAULT 120').run(); } catch (e) { /* 列已存在 */ }
     await db.prepare('CREATE TABLE IF NOT EXISTS risk_rate (' +
         'scope TEXT NOT NULL,' +
         'key TEXT NOT NULL,' +
@@ -156,6 +171,12 @@ async function rawGetRiskConfig(db) {
         midScanPerMin: num(row.mid_scan_per_min, DEFAULTS.midScanPerMin),
         blockSeconds: num(row.block_seconds, DEFAULTS.blockSeconds),
         autoBlock: row.auto_block === 0 ? 0 : 1,
+        vipBurstPerSec: num(row.vip_burst_per_sec, DEFAULTS.vipBurstPerSec),
+        vipBurstPerMin: num(row.vip_burst_per_min, DEFAULTS.vipBurstPerMin),
+        vipMidScanPerMin: num(row.vip_mid_scan_per_min, DEFAULTS.vipMidScanPerMin),
+        anonBurstPerSec: num(row.anon_burst_per_sec, DEFAULTS.anonBurstPerSec),
+        anonBurstPerMin: num(row.anon_burst_per_min, DEFAULTS.anonBurstPerMin),
+        anonMidScanPerMin: num(row.anon_mid_scan_per_min, DEFAULTS.anonMidScanPerMin),
     };
 }
 
@@ -180,10 +201,20 @@ export async function setRiskConfig(db, cfg) {
         midScanPerMin: num(cfg.midScanPerMin, cur.midScanPerMin),
         blockSeconds: num(cfg.blockSeconds, cur.blockSeconds),
         autoBlock: cfg.autoBlock === undefined ? cur.autoBlock : (cfg.autoBlock ? 1 : 0),
+        vipBurstPerSec: num(cfg.vipBurstPerSec, cur.vipBurstPerSec),
+        vipBurstPerMin: num(cfg.vipBurstPerMin, cur.vipBurstPerMin),
+        vipMidScanPerMin: num(cfg.vipMidScanPerMin, cur.vipMidScanPerMin),
+        anonBurstPerSec: num(cfg.anonBurstPerSec, cur.anonBurstPerSec),
+        anonBurstPerMin: num(cfg.anonBurstPerMin, cur.anonBurstPerMin),
+        anonMidScanPerMin: num(cfg.anonMidScanPerMin, cur.anonMidScanPerMin),
     };
     await db.prepare('UPDATE risk_config SET enabled=?, burst_per_sec=?, burst_per_min=?, ' +
-        'mid_scan_per_min=?, block_seconds=?, auto_block=?, updated_at=? WHERE id=1')
-        .bind(n.enabled, n.burstPerSec, n.burstPerMin, n.midScanPerMin, n.blockSeconds, n.autoBlock, nowSec()).run();
+        'mid_scan_per_min=?, block_seconds=?, auto_block=?, ' +
+        'vip_burst_per_sec=?, vip_burst_per_min=?, vip_mid_scan_per_min=?, ' +
+        'anon_burst_per_sec=?, anon_burst_per_min=?, anon_mid_scan_per_min=?, updated_at=? WHERE id=1')
+        .bind(n.enabled, n.burstPerSec, n.burstPerMin, n.midScanPerMin, n.blockSeconds, n.autoBlock,
+            n.vipBurstPerSec, n.vipBurstPerMin, n.vipMidScanPerMin,
+            n.anonBurstPerSec, n.anonBurstPerMin, n.anonMidScanPerMin, nowSec()).run();
     _cfgCache = { cfg: n, ts: Date.now() };
     return n;
 }
@@ -293,10 +324,18 @@ export async function recordMidAccess(db, subject, mid) {
  * @param {string[]} midList 本次请求涉及的歌曲 mid
  * @returns {Promise<{action:'allow'|'block', reason?:string, remain?:number, count?:number}>}
  */
-export async function inspectRequest(db, subject, endpoint, midList) {
+export async function inspectRequest(db, subject, endpoint, midList, level) {
     // 1) 配置: isolate 内存 (TTL 5s), 零 D1
     const cfg = await getRiskConfig(db);
     if (!cfg.enabled) return { action: 'allow' };
+
+    // 分级阈值: VIP 最宽(不限次数但受风控), 匿名次之(压 NAT/基站共享 IP 误伤), 普通用户默认
+    const isVip = level === 'vip';
+    const isAnon = level === 'anon';
+    const secLimit = isVip ? cfg.vipBurstPerSec : (isAnon ? cfg.anonBurstPerSec : cfg.burstPerSec);
+    const minLimit = isVip ? cfg.vipBurstPerMin : (isAnon ? cfg.anonBurstPerMin : cfg.burstPerMin);
+    const midLimit = isVip ? cfg.vipMidScanPerMin : (isAnon ? cfg.anonMidScanPerMin : cfg.midScanPerMin);
+    const levelTag = isVip ? ', VIP' : (isAnon ? ', 匿名' : '');
 
     // 2) 封禁: 内存缓存命中即拦, 零 D1
     const memBlock = memGetBlock(subject);
@@ -304,14 +343,14 @@ export async function inspectRequest(db, subject, endpoint, midList) {
 
     // 3) 秒级突增: 内存滑动计数, 零 D1
     const secCount = memSecBump(subject);
-    if (secCount > cfg.burstPerSec) {
-        await logRiskEvent(db, subject, 'burst_1s', endpoint + ' 1秒内 ' + secCount + ' 次 (阈值 ' + cfg.burstPerSec + ')');
+    if (secCount > secLimit) {
+        await logRiskEvent(db, subject, 'burst_1s', endpoint + ' 1秒内 ' + secCount + ' 次 (阈值 ' + secLimit + levelTag + ')');
         if (cfg.autoBlock) await blockSubject(db, 'subject', subject, cfg.blockSeconds, '频次突增: 1秒 ' + secCount + ' 次');
         return { action: 'block', reason: '请求频率异常(秒级突增)', remain: cfg.blockSeconds, count: secCount };
     }
 
     // 4) MID 遍历: 内存 60 秒去重计数, 零 D1
-    if (midList && midList.length && cfg.midScanPerMin > 0) {
+    if (midList && midList.length && midLimit > 0) {
         const uniq = [];
         for (let i = 0; i < midList.length; i++) {
             const m = midList[i];
@@ -319,8 +358,8 @@ export async function inspectRequest(db, subject, endpoint, midList) {
         }
         if (uniq.length) {
             const seen = memMidCheck(subject, uniq);
-            if (seen > cfg.midScanPerMin) {
-                await logRiskEvent(db, subject, 'mid_scan', '1分钟内遍历 ' + seen + ' 个不同 mid (阈值 ' + cfg.midScanPerMin + ')');
+            if (seen > midLimit) {
+                await logRiskEvent(db, subject, 'mid_scan', '1分钟内遍历 ' + seen + ' 个不同 mid (阈值 ' + midLimit + levelTag + ')');
                 if (cfg.autoBlock) await blockSubject(db, 'subject', subject, cfg.blockSeconds, '疑似全量遍历 mid: ' + seen + ' 个/分钟');
                 return { action: 'block', reason: '行为异常(疑似批量遍历歌曲)', remain: cfg.blockSeconds, count: seen };
             }
@@ -329,8 +368,8 @@ export async function inspectRequest(db, subject, endpoint, midList) {
 
     // 5) 分钟级: 唯一热路径 D1, 单条 UPSERT (RETURNING 回读)
     const minCount = await bumpMinute(db, subject);
-    if (minCount > cfg.burstPerMin) {
-        await logRiskEvent(db, subject, 'burst_60s', endpoint + ' 1分钟内 ' + minCount + ' 次 (阈值 ' + cfg.burstPerMin + ')');
+    if (minCount > minLimit) {
+        await logRiskEvent(db, subject, 'burst_60s', endpoint + ' 1分钟内 ' + minCount + ' 次 (阈值 ' + minLimit + levelTag + ')');
         if (cfg.autoBlock) await blockSubject(db, 'subject', subject, cfg.blockSeconds, '频次超限: 1分钟 ' + minCount + ' 次');
         return { action: 'block', reason: '请求频率异常(分钟级超限)', remain: cfg.blockSeconds, count: minCount };
     }

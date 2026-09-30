@@ -59,6 +59,7 @@ export async function onRequest(context) {
                 username: body.username,
                 password: body.password,
                 dailyLimit: body.dailyLimit,
+                maxQuality: body.maxQuality,
                 level: body.level,
                 status: body.status,
             });

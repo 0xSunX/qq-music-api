@@ -26,8 +26,11 @@ body{font-family:-apple-system,sans-serif;background:#1a1a1a;color:#e0e0e0;paddi
 h1{font-size:1.4rem;margin-bottom:16px;color:#31c27c}
 .bar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
 .bar input{flex:1;min-width:160px;background:#222;border:1px solid #333;color:#e0e0e0;border-radius:4px;padding:8px;font-family:monospace}
-.bar button{cursor:pointer;background:#31c27c;color:#000;border:none;border-radius:4px;padding:8px 16px;font-weight:600}
+.bar button{cursor:pointer;background:#2a2a2a;color:#e0e0e0;border:1px solid #444;border-radius:4px;padding:8px 16px;font-weight:600;transition:background .15s,border-color .15s}
+.bar button:hover{background:#333;border-color:#31c27c}
 .bar button.ghost{background:#2a2a2a;color:#e0e0e0;border:1px solid #444}
+.bar button.danger{background:#7a2a2a;color:#fff;border:1px solid #a33}
+.bar button.danger:hover{background:#8f3030;border-color:#c44}
 table{width:100%;border-collapse:collapse;font-size:.85rem}
 th,td{padding:8px;text-align:left;border-bottom:1px solid #2a2a2a}
 th{color:#888;font-weight:500}
@@ -58,7 +61,8 @@ tr:hover{background:#222}
 .ro{color:#aaa;font-size:.82rem;font-family:monospace;word-break:break-all}
 .modal .btns{display:flex;gap:8px;margin-top:16px}
 .modal .btns button{flex:1;cursor:pointer;border:none;border-radius:4px;padding:10px;font-weight:600}
-.modal .btns .save{background:#31c27c;color:#000}
+.modal .btns .save{background:#2a2a2a;color:#e0e0e0;border:1px solid #31c27c}
+.modal .btns .save:hover{background:#333}
 .modal .btns .cancel{background:#2a2a2a;color:#e0e0e0;border:1px solid #444}
 </style>
 </head>
@@ -66,17 +70,16 @@ tr:hover{background:#222}
 <div class="wrap">
   <h1>👥 用户管理</h1>
   <div class="bar">
-    <input id="token" placeholder="粘贴管理员 Token">
     <input id="search" placeholder="用户名前缀 / 用户ID (全库)">
     <button id="load">加载</button>
     <button id="back" class="ghost">返回上一页</button>
-    <button id="logout" class="ghost">登出</button>
+    <button id="logout" class="danger">退出登录</button>
   </div>
-  <div id="status">请填入 Token 后加载</div>
+  <div id="status">就绪</div>
   <table id="tbl" style="display:none">
     <thead><tr>
       <th>ID</th><th>用户名</th><th>等级</th>
-      <th>角色</th><th>状态</th><th>日限额</th>
+      <th>角色</th><th>状态</th><th>日限额</th><th>音质</th>
       <th>调用次数</th><th>打开次数</th><th>操作</th>
     </tr></thead>
     <tbody id="rows"></tbody>
@@ -97,6 +100,8 @@ tr:hover{background:#222}
     <div class="field"><label>用户名</label><input id="eName"></div>
     <div class="field"><label>重置密码 (留空不改)</label><input id="ePass" placeholder="不修改请留空"></div>
     <div class="field"><label>日限额</label><input id="eLimit" type="number"></div>
+    <div class="field"><label>最高音质 (普通用户生效)</label>
+      <select id="eQuality"><option value="128">128</option><option value="320">320</option><option value="flac">flac</option><option value="atmos_51">atmos_51</option><option value="atmos_2">atmos_2</option><option value="master">master</option></select></div>
     <div class="field"><label>等级</label>
       <select id="eLevel"><option value="normal">普通用户</option><option value="vip">会员</option></select></div>
     <div class="field"><label>状态</label>
@@ -110,7 +115,7 @@ tr:hover{background:#222}
 <script>
 var PAGE = 1, SIZE = 20;
 var curEditId = null;
-var tokenEl = document.getElementById('token');
+var token = localStorage.getItem('adminToken') || '';
 var searchEl = document.getElementById('search');
 var statusEl = document.getElementById('status');
 var rowsEl = document.getElementById('rows');
@@ -126,7 +131,7 @@ function getDeviceId(){
 }
 function api(action, opts){
   var url = '/api/admin/users?action=' + action;
-  var t = tokenEl.value.trim();
+  var t = token.trim();
   var init = opts || {};
   init.headers = Object.assign({ 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json', 'X-Device-Id': getDeviceId() }, init.headers || {});
   return fetch(url, init).then(function(r){ return r.json().then(function(d){ return { ok: r.ok, status: r.status, data: d }; }); });
@@ -138,7 +143,6 @@ function mkBtn(txt, cls, fn){ var b = document.createElement('button'); b.classN
 function fmtTime(ts){ if(!ts) return '-'; var d = new Date(ts * 1000); return d.toLocaleString(); }
 
 function loadUsers(){
-  if(!tokenEl.value.trim()){ setStatus('请先填入 Token', true); return; }
   setStatus('加载中...');
   var kw = searchEl.value.trim();
   api('list&page=' + PAGE + '&size=' + SIZE + '&keyword=' + encodeURIComponent(kw), { method: 'GET' }).then(function(res){
@@ -167,6 +171,7 @@ function renderRows(list){
     tr.appendChild(td(u.role === 'admin' ? '管理员' : '普通用户'));
     var tds = td(''); tds.appendChild(tag(u.status === 1 ? '正常' : '禁用', u.status === 1 ? 'tag-on' : 'tag-off')); tr.appendChild(tds);
     tr.appendChild(td(u.role === 'admin' ? '∞' : (u.level === 'vip' ? 1000 : u.dailyLimit)));
+    tr.appendChild(td(u.role === 'admin' || u.level === 'vip' ? '不限' : (u.maxQuality || '320')));
     tr.appendChild(td((u.apiToday || 0) + ' / ' + (u.apiTotal || 0)));
     tr.appendChild(td((u.appOpenToday || 0) + ' / ' + (u.appOpenTotal || 0)));
     var tdop = document.createElement('td');
@@ -196,6 +201,7 @@ function openEdit(id){
     document.getElementById('eName').value = u.username;
     document.getElementById('ePass').value = '';
     document.getElementById('eLimit').value = u.dailyLimit;
+    document.getElementById('eQuality').value = u.maxQuality || '320';
     var au = res.data.apiUsage || {today:0,total:0};
     var ao = res.data.appOpen || {today:0,total:0};
     var statEl = document.getElementById('mStat');
@@ -218,6 +224,7 @@ function saveEdit(){
   if(pass) body.password = pass;
   var lim = document.getElementById('eLimit').value;
   if(lim !== '') body.dailyLimit = parseInt(lim, 10);
+  body.maxQuality = document.getElementById('eQuality').value;
   body.level = document.getElementById('eLevel').value;
   body.status = parseInt(document.getElementById('eStatus').value, 10);
   setStatus('保存中...');
@@ -251,7 +258,7 @@ document.getElementById('prev').onclick = function(){ if(PAGE > 1){ PAGE--; load
 document.getElementById('next').onclick = function(){ PAGE++; loadUsers(); };
 document.getElementById('back').onclick = function(){ location.href = '/admin'; };
 document.getElementById('logout').onclick = function(){
-  var t = tokenEl.value.trim();
+  var t = token.trim();
   var done = function(){ try{ localStorage.removeItem('adminToken'); }catch(e){} location.href = '/admin'; };
   if(!t){ done(); return; }
   fetch('/api/user?action=logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json', 'X-Device-Id': getDeviceId() } }).then(done, done);
@@ -265,10 +272,8 @@ searchEl.addEventListener('input', function(){
   searchTimer = setTimeout(function(){ PAGE = 1; loadUsers(); }, 300);
 });
 
-tokenEl.value = localStorage.getItem('adminToken') || '';
-if(tokenEl.value.trim()){ PAGE = 1; loadUsers(); }
+if(token){ PAGE = 1; loadUsers(); }
 else { setStatus('未登录, 请先到 /admin 登录', true); }
-tokenEl.addEventListener('change', function(){ localStorage.setItem('adminToken', tokenEl.value.trim()); });
 </script>
 </body>
 </html>`;

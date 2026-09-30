@@ -106,9 +106,9 @@ h1{font-size:1.4rem;margin-bottom:6px;color:#f0a020}
 h2{font-size:1rem;color:#31c27c;margin:26px 0 12px;padding-bottom:6px;border-bottom:1px solid #2a2a2a}
 .bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
 .bar input{flex:1;min-width:160px;background:#222;border:1px solid #333;color:#e0e0e0;border-radius:4px;padding:8px;font-family:monospace}
-.bar button{cursor:pointer;background:#31c27c;color:#000;border:none;border-radius:4px;padding:8px 16px;font-weight:600}
+.bar button{cursor:pointer;background:#2a2a2a;color:#e0e0e0;border:1px solid #444;border-radius:4px;padding:8px 16px;font-weight:600;transition:background .15s,border-color .15s}
+.bar button:hover{background:#333;border-color:#31c27c}
 .bar button.ghost{background:#2a2a2a;color:#e0e0e0;border:1px solid #444}
-.bar button.warn{background:#7a2a2a;color:#fff}
 .cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}
 .card{flex:1;min-width:130px;background:#222;border:1px solid #2c2c2c;border-radius:8px;padding:16px}
 .card .n{font-size:1.7rem;font-weight:700;color:#f0a020;font-variant-numeric:tabular-nums}
@@ -133,13 +133,12 @@ tr:hover{background:#222}
 <body>
 <div class="wrap">
   <h1>🛡 风控防护</h1>
-  <div class="sub">行为风控 · 频次突增检测 · MID 遍历识别 · 自动封禁 · 请求签名防重放</div>
+  <div class="sub">行为风控 · 全员生效(含匿名) · 频次突增检测 · MID 遍历识别 · 自动封禁 · 请求签名防重放</div>
   <div class="bar">
-    <input id="token" placeholder="粘贴管理员 Token">
     <button id="load">加载</button>
     <button id="back" class="ghost">返回上一页</button>
   </div>
-  <div id="status">请填入 Token 后加载</div>
+  <div id="status">就绪</div>
 
   <div class="cards">
     <div class="card"><div class="n" id="cBlock">-</div><div class="l">当前封禁主体</div></div>
@@ -157,6 +156,18 @@ tr:hover{background:#222}
     <div class="f"><label>封禁时长(秒)</label><input id="fBlock" type="number"></div>
     <div class="f"><label>命中即自动封禁 (1/0)</label><input id="fAuto" type="number"></div>
   </div>
+  <h2>VIP 专属风控阈值 (VIP 不限次数, 但仍受风控约束)</h2>
+  <div class="cfg">
+    <div class="f"><label>VIP 每秒请求上限</label><input id="fvSec" type="number"></div>
+    <div class="f"><label>VIP 每分钟请求上限</label><input id="fvMin" type="number"></div>
+    <div class="f"><label>VIP 每分钟不同 MID 上限</label><input id="fvMid" type="number"></div>
+  </div>
+  <h2>匿名专属风控阈值 (按 IP 聚合, 阈值放宽以降低 NAT/共享 IP 误伤)</h2>
+  <div class="cfg">
+    <div class="f"><label>匿名 每秒请求上限</label><input id="faSec" type="number"></div>
+    <div class="f"><label>匿名 每分钟请求上限</label><input id="faMin" type="number"></div>
+    <div class="f"><label>匿名 每分钟不同 MID 上限</label><input id="faMid" type="number"></div>
+  </div>
   <div class="bar">
     <button id="saveCfg">保存风控参数</button>
     <button id="toggleSign" class="ghost">切换请求签名校验</button>
@@ -164,7 +175,7 @@ tr:hover{background:#222}
 
   <h2>当前封禁</h2>
   <div class="bar">
-    <button id="unblockAll" class="warn">全部解封</button>
+    <button id="unblockAll">全部解封</button>
   </div>
   <table id="tblBlock" style="display:none">
     <thead><tr><th>主体</th><th>剩余</th><th>原因</th><th>命中次数</th><th>操作</th></tr></thead>
@@ -173,7 +184,7 @@ tr:hover{background:#222}
 
   <h2>风控事件</h2>
   <div class="bar">
-    <button id="clearEvents" class="warn">清空事件</button>
+    <button id="clearEvents">清空事件</button>
   </div>
   <table id="tblEvent" style="display:none">
     <thead><tr><th>时间</th><th>主体</th><th>规则</th><th>详情</th></tr></thead>
@@ -182,7 +193,7 @@ tr:hover{background:#222}
 </div>
 <script>
 (function(){
-  var tokenEl=document.getElementById('token');
+  var token=localStorage.getItem('adminToken')||'';
   var statusEl=document.getElementById('status');
   var curSign=0;
   function getDeviceId(){
@@ -193,7 +204,7 @@ tr:hover{background:#222}
   function api(action, opts){
     var url='/api/admin/risk?action='+action;
     var init=opts||{};
-    init.headers=Object.assign({ 'Authorization':'Bearer '+tokenEl.value.trim(), 'Content-Type':'application/json', 'X-Device-Id':getDeviceId() }, init.headers||{});
+    init.headers=Object.assign({ 'Authorization':'Bearer '+token.trim(), 'Content-Type':'application/json', 'X-Device-Id':getDeviceId() }, init.headers||{});
     return fetch(url, init).then(function(r){ return r.json().then(function(d){ return { ok:r.ok, status:r.status, data:d }; }); });
   }
   function setStatus(m,e){ statusEl.textContent=m; statusEl.style.color=e?'#f44':'#888'; }
@@ -235,6 +246,12 @@ tr:hover{background:#222}
       document.getElementById('fMid').value=c.midScanPerMin;
       document.getElementById('fBlock').value=c.blockSeconds;
       document.getElementById('fAuto').value=c.autoBlock;
+      document.getElementById('fvSec').value=c.vipBurstPerSec;
+      document.getElementById('fvMin').value=c.vipBurstPerMin;
+      document.getElementById('fvMid').value=c.vipMidScanPerMin;
+      document.getElementById('faSec').value=c.anonBurstPerSec;
+      document.getElementById('faMin').value=c.anonBurstPerMin;
+      document.getElementById('faMid').value=c.anonMidScanPerMin;
     });
     api('signconfig',{method:'GET'}).then(function(res){
       if(!res.ok) return;
@@ -269,11 +286,8 @@ tr:hover{background:#222}
   }
 
   document.getElementById('load').onclick=function(){
-    if(!tokenEl.value.trim()){ setStatus('请先填入 Token',1); return; }
-    localStorage.setItem('adminToken',tokenEl.value.trim());
     setStatus('加载中...');
     loadStats(); loadConfig(); loadBlocks();
-    setStatus('已加载');
   };
   document.getElementById('back').onclick=function(){ history.length>1?history.back():location.href='/admin'; };
   document.getElementById('saveCfg').onclick=function(){
@@ -283,7 +297,13 @@ tr:hover{background:#222}
       burstPerMin:parseInt(document.getElementById('fMin').value,10),
       midScanPerMin:parseInt(document.getElementById('fMid').value,10),
       blockSeconds:parseInt(document.getElementById('fBlock').value,10),
-      autoBlock:parseInt(document.getElementById('fAuto').value,10)
+      autoBlock:parseInt(document.getElementById('fAuto').value,10),
+      vipBurstPerSec:parseInt(document.getElementById('fvSec').value,10),
+      vipBurstPerMin:parseInt(document.getElementById('fvMin').value,10),
+      vipMidScanPerMin:parseInt(document.getElementById('fvMid').value,10),
+      anonBurstPerSec:parseInt(document.getElementById('faSec').value,10),
+      anonBurstPerMin:parseInt(document.getElementById('faMin').value,10),
+      anonMidScanPerMin:parseInt(document.getElementById('faMid').value,10)
     };
     api('config',{method:'POST',body:JSON.stringify(body)}).then(function(res){
       setStatus(res.ok?'配置已保存':'保存失败: '+(res.data.error||res.status), !res.ok);
@@ -305,6 +325,8 @@ tr:hover{background:#222}
     if(!confirm('确认清空全部风控事件?')) return;
     api('clearevents',{method:'POST',body:'{}'}).then(function(res){ setStatus(res.ok?'事件已清空':'失败', !res.ok); loadStats(); });
   };
+  if(token){ loadStats(); loadConfig(); loadBlocks(); }
+  else { setStatus('未登录, 请先到 /admin 登录', true); }
 })();
 </script>
 </body>

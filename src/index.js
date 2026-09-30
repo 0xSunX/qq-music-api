@@ -213,8 +213,13 @@ function generateConsoleHtml(totalCount) {
         .at-in{margin-bottom:8px}
         .at-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
         .at-row label{min-width:90px;color:#f0a020;font-family:monospace;font-size:.85rem}
-        .at-btn{cursor:pointer;background:#31c27c;color:#000;font-weight:600;border:none;padding:10px;margin-top:4px}
-        .at-btn:hover{opacity:.9}
+        .at-btn{cursor:pointer;background:#2a2a2a;color:#e0e0e0;border:1px solid #444;font-weight:600;padding:10px;margin-top:4px;border-radius:4px;transition:background .15s,border-color .15s}
+        .at-btn:hover{background:#333;border-color:#31c27c}
+        .nav-bar{margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap}
+        .nav-btn{display:inline-block;background:#2a2a2a;border:1px solid #444;color:#e0e0e0;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none;transition:background .15s,border-color .15s}
+        .nav-btn:hover{background:#333;border-color:#31c27c}
+        .nav-logout{margin-left:auto;background:#7a2a2a;border:1px solid #a33;color:#fff;font-weight:600;padding:10px 20px;border-radius:6px;cursor:pointer;transition:background .15s,border-color .15s}
+        .nav-logout:hover{background:#8f3030;border-color:#c44}
         .at-resp{white-space:pre-wrap;word-break:break-all;max-height:400px;overflow:auto;margin-top:10px;color:#aaa}
         .at-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.72rem;font-weight:700;vertical-align:middle}
         .at-get{background:#31c27c;color:#000}
@@ -252,7 +257,7 @@ function generateConsoleHtml(totalCount) {
 <h2 style="color:#31c27c;margin-bottom:18px;text-align:center;font-size:1.1rem">管理登录</h2>
 <input id="gUser" placeholder="用户名" style="width:100%;background:#181818;border:1px solid #333;color:#e0e0e0;border-radius:4px;padding:9px;margin-bottom:10px">
 <input id="gPass" type="password" placeholder="密码" style="width:100%;background:#181818;border:1px solid #333;color:#e0e0e0;border-radius:4px;padding:9px;margin-bottom:12px">
-<button id="gBtn" style="width:100%;background:#31c27c;color:#000;border:none;border-radius:4px;padding:10px;font-weight:600;cursor:pointer">登录</button>
+<button id="gBtn" style="width:100%;background:#2a2a2a;color:#e0e0e0;border:1px solid #31c27c;border-radius:4px;padding:10px;font-weight:600;cursor:pointer">登录</button>
 <div id="gMsg" style="color:#888;font-size:.82rem;margin-top:10px;text-align:center;min-height:18px"></div>
 </div>
 </div>
@@ -325,12 +330,12 @@ function generateConsoleHtml(totalCount) {
 <div class="c">
     <h1>QQ Music API</h1>
     <button id="backTop" title="回到顶部">⬆</button>
-    <div style="margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap">
-        <a href="/admin/users" style="display:inline-block;background:#31c27c;color:#000;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none">👥 用户管理</a>
-        <a href="/admin/cache" style="display:inline-block;background:#4ec9b0;color:#000;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none">🗃 缓存列表</a>
-        <a href="/admin/risk" style="display:inline-block;background:#f0a020;color:#000;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none">🛡 风控防护</a>
-        <a href="/" style="display:inline-block;background:#2a2a2a;border:1px solid #444;color:#e0e0e0;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none">🏠 网站首页</a>
-        <button id="adminLogout" style="background:#2a2a2a;border:1px solid #444;color:#e0e0e0;font-weight:600;padding:10px 20px;border-radius:6px;cursor:pointer">🚪 退出登录</button>
+    <div class="nav-bar">
+        <a href="/admin/users" class="nav-btn">👥 用户管理</a>
+        <a href="/admin/cache" class="nav-btn">🗃 缓存列表</a>
+        <a href="/admin/risk" class="nav-btn">🛡 风控防护</a>
+        <a href="/" class="nav-btn">🏠 网站首页</a>
+        <button id="adminLogout" class="nav-logout">🚪 退出登录</button>
     </div>
     <div class="e" id="api-tester">
         <div class="h"><span class="m">调试</span><span class="p">API Tester</span></div>
@@ -351,6 +356,9 @@ function generateConsoleHtml(totalCount) {
             <button id="at-copy-resp">复制结果</button>
             <button id="at-goto">定位说明</button>
         </div>
+        <div class="at-desc">自定义请求头 (每行一条: Key: Value, 例如 X-Setup-Key)</div>
+        <textarea id="at-headers" style="width:100%;min-height:56px;background:#181818;border:1px solid #333;color:#e0e0e0;border-radius:4px;padding:8px;font-family:monospace;font-size:.85rem;resize:vertical;box-sizing:border-box" placeholder="X-Setup-Key: 你的初始化密钥"></textarea>
+
         <button id="at-send" class="at-btn">发送请求</button>
         <div class="at-status" id="at-status">就绪</div>
         <pre id="at-resp" class="at-resp">响应结果将显示在这里</pre>
@@ -392,14 +400,14 @@ function generateConsoleHtml(totalCount) {
     <div class="e" id="doc-adminusers-status"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=status</span></div><p class="d">禁用/启用用户</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 status</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr><tr><td><span class="pm">status</span><span class="r">*</span></td><td>int</td><td>1启用 0禁用</td></tr></table><div class="ex">POST /api/admin/users?action=status{ "userId":2, "status":0 }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述(如 已启用/已禁用)</td></tr></table></div>
     <div class="e" id="doc-adminusers-delete"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=delete</span></div><p class="d">删除用户(级联清理会话与用量)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 delete</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr></table><div class="ex">POST /api/admin/users?action=delete{ "userId":2 }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">userId</span></td><td>被删除的用户ID</td></tr></table></div>
     <div class="e" id="doc-adminusers-detail"><div class="h"><span class="m">GET</span><span class="p">/api/admin/users?action=detail</span></div><p class="d">[admin] 单个用户详情(含设备ID与时间戳)</p><table><tr><th>参数</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 detail</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr></table><div class="ex">GET /api/admin/users?action=detail&userId=2</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">user.id</span></td><td>用户ID</td></tr><tr><td><span class="pm">user.username</span></td><td>用户名</td></tr><tr><td><span class="pm">user.level</span></td><td>等级 normal/vip</td></tr><tr><td><span class="pm">user.role</span></td><td>角色 user/admin</td></tr><tr><td><span class="pm">user.status</span></td><td>1启用 0禁用</td></tr><tr><td><span class="pm">user.dailyLimit</span></td><td>日调用限额</td></tr><tr><td><span class="pm">user.deviceId</span></td><td>注册设备标识</td></tr><tr><td><span class="pm">user.createdAt</span></td><td>注册时间戳(秒)</td></tr><tr><td><span class="pm">user.updatedAt</span></td><td>最后更新时间戳(秒)</td></tr><tr><td><span class="pm">apiUsage.today</span></td><td>今日 API 调用次数</td></tr><tr><td><span class="pm">apiUsage.total</span></td><td>累计 API 调用次数</td></tr><tr><td><span class="pm">appOpen.today</span></td><td>今日 APP 打开次数</td></tr><tr><td><span class="pm">appOpen.total</span></td><td>累计 APP 打开次数</td></tr></table></div>
-    <div class="e" id="doc-adminusers-update"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=update</span></div><p class="d">部分更新用户(改密强制下线)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 update</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr><tr><td><span class="pm">username</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span></td><td>string</td><td>至少 6 位,改后强制下线</td></tr><tr><td><span class="pm">dailyLimit</span></td><td>int</td><td>1-100000</td></tr><tr><td><span class="pm">level</span></td><td>string</td><td>normal / vip</td></tr><tr><td><span class="pm">status</span></td><td>int</td><td>1启用 0禁用</td></tr></table><div class="ex">POST /api/admin/users?action=update{ "userId":2, "dailyLimit":100, "level":"vip" }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">user</span></td><td>更新后的完整用户信息</td></tr></table></div>
+    <div class="e" id="doc-adminusers-update"><div class="h"><span class="m">POST</span><span class="p">/api/admin/users?action=update</span></div><p class="d">部分更新用户(改密强制下线)</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">action</span><span class="r">*</span></td><td>string</td><td>固定 update</td></tr><tr><td><span class="pm">userId</span><span class="r">*</span></td><td>int</td><td>目标用户ID</td></tr><tr><td><span class="pm">username</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span></td><td>string</td><td>至少 6 位,改后强制下线</td></tr><tr><td><span class="pm">dailyLimit</span></td><td>int</td><td>1-100000</td></tr><tr><td><span class="pm">maxQuality</span></td><td>string</td><td>128/320/flac/atmos_51/atmos_2/master, 普通用户音质上限(VIP/管理员不受限)</td></tr><tr><td><span class="pm">level</span></td><td>string</td><td>normal / vip</td></tr><tr><td><span class="pm">status</span></td><td>int</td><td>1启用 0禁用</td></tr></table><div class="ex">POST /api/admin/users?action=update{ "userId":2, "dailyLimit":100, "level":"vip" }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">user</span></td><td>更新后的完整用户信息</td></tr></table></div>
     <h3>凭证管理</h3>
     <div class="e" id="doc-admincred"><div class="h"><span class="m">GET</span><span class="p">/api/admin/credential</span></div><p class="d">[admin] 查看凭证完整状态(不脱敏, 已剔除 refresh_key)</p><div class="ex">GET /api/admin/credential</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">credential</span></td><td>完整凭证对象(musicid/musickey/refresh_token/openid 等字段, 已剔除 refresh_key); 无凭证时为 null</td></tr></table></div>
     <div class="e"><div class="h"><span class="m">POST</span><span class="p">/api/admin/credential</span></div><p class="d">[admin] 更新 QQ 音乐凭证</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">musicid</span><span class="r">*</span></td><td>string</td><td>音乐账号ID</td></tr><tr><td><span class="pm">musickey</span><span class="r">*</span></td><td>string</td><td>音乐密钥</td></tr><tr><td><span class="pm">credential</span></td><td>object</td><td>也可整体包在 credential 字段里</td></tr></table><div class="ex">POST /api/admin/credential{ "musicid":"xxx", "musickey":"xxx" }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">success</span></td><td>true 表示写入成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">musicid</span></td><td>已保存的音乐账号ID</td></tr></table></div>
     <h3>站点初始化</h3>
     <div class="e" id="doc-setup"><div class="h"><span class="m">GET/POST</span><span class="p">/api/setup</span></div><p class="d">站点初始化: GET 查看状态, POST 清库并创建初始管理员(检测到已有 admin 即锁定, 管理员等级为「管理员」且不限调用)</p><p class=\"d\"><b style=\"color:#f0a020\">⚠ 安全前置: 服务端必须配置 Secret <span class=\"pm\">SETUP_KEY</span>, 且 POST 请求头 <span class=\"pm\">X-Setup-Key</span> 与其完全一致。</b> 未配置 SETUP_KEY 时 POST 一律 403「未配置 SETUP_KEY, 初始化入口已禁用」; 配置了但请求头不一致则 403「初始化密钥无效」——用于防止他人到已部署站上直接清库重建管理员。</p><table><tr><th>项</th><th>位置</th><th>说明</th></tr><tr><td><span class=\"pm\">X-Setup-Key</span><span class=\"r\">*</span></td><td>请求头</td><td>初始化密钥, 值 = 服务端 Secret SETUP_KEY</td></tr><tr><td><span class=\"pm\">SETUP_KEY</span></td><td>CF Secret</td><td>Cloudflare Dashboard → Worker → Settings → Variables and Secrets 添加(Type 选 Secret), 建议 openssl rand -hex 32 生成</td></tr></table><p class=\"d\">请求体字段:</p><table><tr><th>字段</th><th>类型</th><th>说明</th></tr><tr><td><span class="pm">username</span><span class="r">*</span></td><td>string</td><td>3-20 位字母数字下划线</td></tr><tr><td><span class="pm">password</span><span class="r">*</span></td><td>string</td><td>至少 6 位</td></tr></table><div class="ex">POST /api/setup{ "username":"admin", "password":"******" }</div><p class="d">返回字段:</p><table><tr><th>字段</th><th>说明</th></tr><tr><td><span class="pm">code</span></td><td>0 表示成功</td></tr><tr><td><span class="pm">message</span></td><td>结果描述</td></tr><tr><td><span class="pm">adminId</span></td><td>新建管理员用户ID</td></tr><tr><td><span class="pm">username</span></td><td>管理员用户名</td></tr></table></div>
     <h3>风控防护</h3>
-    <div class=\"e\" id=\"doc-risk\"><div class=\"h\"><span class=\"m\">GET/POST</span><span class=\"p\">/api/admin/risk</span></div><p class=\"d\">[admin] 服务端行为风控管理, 通过 ?action= 分发; 图形页 /admin/risk</p><table><tr><th>action</th><th>方法</th><th>说明</th></tr><tr><td><span class=\"pm\">stats</span></td><td>GET</td><td>总览(当前封禁数/今日事件/累计事件/规则分布/最近事件)</td></tr><tr><td><span class=\"pm\">config</span></td><td>GET/POST</td><td>读/写风控参数: enabled/burstPerSec/burstPerMin/midScanPerMin/blockSeconds/autoBlock</td></tr><tr><td><span class=\"pm\">blocks</span></td><td>GET</td><td>当前封禁列表(分页)</td></tr><tr><td><span class=\"pm\">events</span></td><td>GET</td><td>风控事件审计列表(分页)</td></tr><tr><td><span class=\"pm\">unblock</span></td><td>POST</td><td>解封单个主体, body {scope,key}</td></tr><tr><td><span class=\"pm\">unblockall</span></td><td>POST</td><td>全部解封</td></tr><tr><td><span class=\"pm\">clearevents</span></td><td>POST</td><td>清空全部事件</td></tr><tr><td><span class=\"pm\">signconfig</span></td><td>GET/POST</td><td>读取/切换请求签名校验开关(需同时配置 Secret REQUEST_SECRET)</td></tr></table><p class=\"d\">规则: 秒级突增 burst_1s / 分钟超限 burst_60s / MID 遍历 mid_scan。仅作用于已登录私有业务端点; 命中即 429, 开启 autoBlock 时按 blockSeconds 封禁主体。</p></div>
+    <div class=\"e\" id=\"doc-risk\"><div class=\"h\"><span class=\"m\">GET/POST</span><span class=\"p\">/api/admin/risk</span></div><p class=\"d\">[admin] 服务端行为风控管理, 通过 ?action= 分发; 图形页 /admin/risk</p><table><tr><th>action</th><th>方法</th><th>说明</th></tr><tr><td><span class=\"pm\">stats</span></td><td>GET</td><td>总览(当前封禁数/今日事件/累计事件/规则分布/最近事件)</td></tr><tr><td><span class=\"pm\">config</span></td><td>GET/POST</td><td>读/写风控参数: enabled/burstPerSec/burstPerMin/midScanPerMin/blockSeconds/autoBlock; VIP 专属 vipBurstPerSec/vipBurstPerMin/vipMidScanPerMin(VIP 不限次数但受风控约束); 匿名专属 anonBurstPerSec/anonBurstPerMin/anonMidScanPerMin(按 IP 聚合, 阈值放宽防 NAT 误伤)</td></tr><tr><td><span class=\"pm\">blocks</span></td><td>GET</td><td>当前封禁列表(分页)</td></tr><tr><td><span class=\"pm\">events</span></td><td>GET</td><td>风控事件审计列表(分页)</td></tr><tr><td><span class=\"pm\">unblock</span></td><td>POST</td><td>解封单个主体, body {scope,key}</td></tr><tr><td><span class=\"pm\">unblockall</span></td><td>POST</td><td>全部解封</td></tr><tr><td><span class=\"pm\">clearevents</span></td><td>POST</td><td>清空全部事件</td></tr><tr><td><span class=\"pm\">signconfig</span></td><td>GET/POST</td><td>读取/切换请求签名校验开关(需同时配置 Secret REQUEST_SECRET)</td></tr></table><p class=\"d\">规则: 秒级突增 burst_1s / 分钟超限 burst_60s / MID 遍历 mid_scan。仅作用于已登录私有业务端点; 命中即 429, 开启 autoBlock 时按 blockSeconds 封禁主体。</p></div>
     <h3>管理页面</h3>
     <div class="e"><div class="h"><span class="m">PAGE</span><span class="p">/admin/users</span></div><p class="d">图形化管理后台, 填入管理员 token 后可增删改查用户</p><div class="ex"><a href="/admin/users" style="color:#31c27c">打开用户管理后台 →</a></div></div>
     <footer><a href="https://isunc.com">文档</a> · <a href="https://github.com/0xSunX/qq-music-api">GitHub</a> · © iSun</footer>
@@ -445,7 +453,7 @@ function generateConsoleHtml(totalCount) {
     {group:'系统维护',docKey:'doc-setup',tip:'初始化(读)',path:'/api/setup',method:'GET',desc:'查看站点初始化状态(公开; ?status=1 只返回 JSON {initialized}; 已初始化则返回锁定页)',params:[{k:'status',v:'1'}]},
     {group:'风控防护',docKey:'doc-risk',tip:'风控总览',path:'/api/admin/risk',method:'GET',desc:'[admin] 风控总览(stats 卡片数据)',params:[{k:'action',v:'stats'}]},
     {group:'风控防护',docKey:'doc-risk',tip:'风控配置(读)',path:'/api/admin/risk',method:'GET',desc:'[admin] 读取风控参数(阈值/封禁时长/签名开关)',params:[{k:'action',v:'config'}]},
-    {group:'风控防护',docKey:'doc-risk',tip:'风控配置(写)',path:'/api/admin/risk',method:'POST',desc:'[admin] 更新风控参数(enabled/burstPerSec/burstPerMin/midScanPerMin/blockSeconds/autoBlock)',params:[{k:'action',v:'config'}]},
+    {group:'风控防护',docKey:'doc-risk',tip:'风控配置(写)',path:'/api/admin/risk',method:'POST',desc:'[admin] 更新风控参数(enabled/burstPerSec/burstPerMin/midScanPerMin/blockSeconds/autoBlock; VIP 专属 vipBurstPerSec/vipBurstPerMin/vipMidScanPerMin)',params:[{k:'action',v:'config'}]},
     {group:'风控防护',docKey:'doc-risk',tip:'封禁列表',path:'/api/admin/risk',method:'GET',desc:'[admin] 当前封禁主体列表(分页)',params:[{k:'action',v:'blocks'},{k:'page',v:'1'},{k:'size',v:'20'}]},
     {group:'风控防护',docKey:'doc-risk',tip:'风控事件',path:'/api/admin/risk',method:'GET',desc:'[admin] 风控事件审计列表(分页)',params:[{k:'action',v:'events'},{k:'page',v:'1'},{k:'size',v:'20'}]},
     {group:'风控防护',docKey:'doc-risk',tip:'解封单个',path:'/api/admin/risk',method:'POST',desc:'[admin] 解封单个主体, body: {scope,key}',params:[{k:'action',v:'unblock'}]},
@@ -464,7 +472,7 @@ function generateConsoleHtml(totalCount) {
     '改用户等级': { userId: "目标用户ID(数字, 如 2)", level: "vip 或 normal" },
     '禁用/启用用户': { userId: "目标用户ID(数字, 如 2)", status: "1 启用 / 0 禁用" },
     '删除用户': { userId: "目标用户ID(数字, 如 2)" },
-    '更新用户': { userId: "目标用户ID(数字, 如 2)", username: "新用户名(可省)", password: "新密码(可省,至少6位)", dailyLimit: "日限额(1-100000)", level: "vip 或 normal(可省)", status: "1 启用 / 0 禁用(可省)" },
+    '更新用户': { userId: "目标用户ID(数字, 如 2)", username: "新用户名(可省)", password: "新密码(可省,至少6位)", dailyLimit: "日限额(1-100000)", maxQuality: "最高音质 128/320/flac/atmos_51/atmos_2/master(普通用户生效)", level: "vip 或 normal(可省)", status: "1 启用 / 0 禁用(可省)" },
     '凭证(写)': { openid: "你的OpenID", musicid: "你的QQ号", musickey: "你的MusicKey", refresh_token: "你的RefreshToken", login_type: 2, extra_fields: { musickeyCreateTime: 0, keyExpiresIn: 259200 } },
     '初始化(写)': { username: "管理员用户名", password: "管理员密码(至少6位)" },
     '公告(写)': { id: "notice_welcome", type: "popup", level: "info", title: "公告标题", content: "公告正文, 一眼看清要补什么", actionText: "知道了", actionUrl: "", forceShow: false, platforms: "android,ios", minVersion: "", maxVersion: "", channels: "", startAt: 0, endAt: 0, priority: 10, enabled: true },
@@ -511,6 +519,7 @@ function generateConsoleHtml(totalCount) {
   var bodyWrap = document.getElementById('at-body-wrap');
   var bodyBox = document.getElementById('at-body');
   var bodyHl = document.getElementById('at-body-hl');
+  var headersEl = document.getElementById('at-headers');
   function syncBodyHl(){ if(bodyHl){ bodyHl.innerHTML = hlJson(bodyBox.value || '') + NL; } }
   bodyBox.addEventListener('input', syncBodyHl);
   bodyBox.addEventListener('scroll', function(){ if(bodyHl){ bodyHl.scrollTop = bodyBox.scrollTop; bodyHl.scrollLeft = bodyBox.scrollLeft; } });
@@ -594,9 +603,21 @@ function generateConsoleHtml(totalCount) {
     }
     var opts = { method: api.method };
     var hdrs = {};
+    // 自定义请求头: 每行一条 Key: Value (例: X-Setup-Key: xxx)
+    if(headersEl){
+      headersEl.value.split(/\r?\n/).forEach(function(line){
+        line = line.trim();
+        if(!line) return;
+        var idx = line.indexOf(':');
+        if(idx <= 0) return;
+        var hk = line.slice(0, idx).trim();
+        var hv = line.slice(idx + 1).trim();
+        if(hk && hv) hdrs[hk] = hv;
+      });
+    }
     var tk = localStorage.getItem('adminToken');
     if(tk) hdrs['Authorization'] = 'Bearer ' + tk;
-    hdrs['X-Device-Id'] = getDeviceId();
+    if(!hdrs['X-Device-Id']) hdrs['X-Device-Id'] = getDeviceId();
     if(api.method === 'POST'){
       var raw = bodyBox.value.trim() || '{}';
       try { JSON.parse(raw); } catch(e){ statusEl.innerHTML = '\u003cspan class="err"\u003eBody JSON 格式错误\u003c/span\u003e'; return; }
@@ -621,9 +642,22 @@ function generateConsoleHtml(totalCount) {
       resp.innerHTML = '<span class="jm">' + esc(api.method) + '</span> ' + esc(url) + NL + NL + '<span class="js">请求失败: ' + esc(e.message) + '</span>';
     });
   }
-  sel.addEventListener('change', function(){ renderParams(); applyDefaultBody(); });
+  // 需要特定请求头的接口预填提示(不覆盖用户已填内容)
+  var HEADER_HINTS = {
+    '/api/setup': 'X-Setup-Key: ',
+    '/api/user?action=device': ''
+  };
+  function applyHeaderHint(){
+    if(!headersEl) return;
+    var api = APIS[sel.value];
+    if(!api) return;
+    var hit = HEADER_HINTS[api.path];
+    if(hit && !headersEl.value.trim()){ headersEl.value = hit; }
+  }
+  sel.addEventListener('change', function(){ renderParams(); applyDefaultBody(); applyHeaderHint(); });
   renderParams();
   applyDefaultBody();
+  applyHeaderHint();
   btn.addEventListener('click', doSend);
   document.getElementById('at-reset').addEventListener('click', function(){ renderParams(); applyDefaultBody(); });
   document.getElementById('at-goto').addEventListener('click', function(){
@@ -764,6 +798,72 @@ export default {
                 }
             }
 
+            // 会话预解析(仅用于风控主体识别, 不阻断; 匿名请求同样纳入风控)
+            let riskUser = null;
+            if (env.DB) {
+                const tk0 = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+                const dv0 = request.headers.get("X-Device-Id") || "";
+                if (tk0 && dv0) { try { riskUser = await verifySession(env.DB, tk0, dv0); } catch (e) {} }
+            }
+
+            // ---------- 行为风控 (全员生效: VIP / 普通用户 / 未注册匿名请求 均纳入) ----------
+            // 排除认证动作(register/login/device)与管理端, 避免打挂登录入口与后台自身。
+            if (env.DB && !isAuthAction && !ADMIN_ROUTES.includes(path)) {
+                try {
+                    await ensureRiskTables(env.DB);
+                    const riskIp = (request.headers.get("CF-Connecting-IP")
+                        || (request.headers.get("X-Forwarded-For") || "").split(",")[0].trim()
+                        || "unknown");
+                    // 主体识别: 已登录按用户维度, 未登录/匿名按 IP 维度
+                    const subject = riskUser ? ("user:" + riskUser.id) : ("ip:" + riskIp);
+                    const riskLevel = riskUser ? riskUser.level : "anon";
+                    const riskUrl = new URL(request.url);
+
+                    // 1) 请求签名校验(仅对已登录用户; 匿名请求无签名要求)
+                    if (riskUser) {
+                        const signOn = await getReqSignEnabled(env.DB);
+                        if (signOn && env.REQUEST_SECRET) {
+                            const vr = await verifyRequestSignature(request, env.REQUEST_SECRET, env.DB);
+                            if (!vr.ok) {
+                                await logRiskEvent(env.DB, subject, "bad_sign", (vr.code || "") + ": " + (vr.message || ""));
+                                return new Response(JSON.stringify({
+                                    error: "请求签名校验失败",
+                                    code: vr.code,
+                                    detail: vr.message,
+                                }), {
+                                    status: 403,
+                                    headers: { "Content-Type": "application/json", ...corsHeaders },
+                                });
+                            }
+                        }
+                    }
+
+                    // 2) 行为风控: 频次突增 + MID 遍历识别
+                    let riskMids = [];
+                    const midParam = riskUrl.searchParams.get("mid");
+                    if (midParam) {
+                        riskMids = midParam.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+                    }
+                    const verdict = await inspectRequest(env.DB, subject, path, riskMids, riskLevel);
+                    if (verdict.action === "block") {
+                        return new Response(JSON.stringify({
+                            error: "请求已被风控拦截",
+                            reason: verdict.reason,
+                            retryAfter: verdict.remain || 0,
+                        }), {
+                            status: 429,
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Retry-After": String(verdict.remain || 0),
+                                ...corsHeaders,
+                            },
+                        });
+                    }
+                } catch (e) {
+                    console.error("[Risk] 风控检查异常(已放行):", e);
+                }
+            }
+
             if (env.DB && !isPublic && !isAuthAction) {
                 const token = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
                 const deviceId = request.headers.get("X-Device-Id") || "";
@@ -802,61 +902,6 @@ export default {
                         // 管理员: 不限流, 但一样计入调用统计; 业务失败不回滚
                         try { await countUsage(env.DB, currentUser.id); } catch (e) { console.error("计数失败:", e); }
                     }
-                }
-            }
-
-            // ---------- 请求签名 + 行为风控 (仅私有业务端点) ----------
-            // 不拦公开端点/认证端点/管理端, 避免把初始化与后台打挂。
-            if (env.DB && !isPublic && !isAuthAction && currentUser) {
-                try {
-                    await ensureRiskTables(env.DB);
-                    const riskIp = (request.headers.get("CF-Connecting-IP")
-                        || (request.headers.get("X-Forwarded-For") || "").split(",")[0].trim()
-                        || "unknown");
-                    const subject = "user:" + currentUser.id;
-                    const riskUrl = new URL(request.url);
-
-                    // 1) 请求签名校验(可选, 后台开关控制; 未配 REQUEST_SECRET 时自动跳过)
-                    const signOn = await getReqSignEnabled(env.DB);
-                    if (signOn && env.REQUEST_SECRET) {
-                        const vr = await verifyRequestSignature(request, env.REQUEST_SECRET, env.DB);
-                        if (!vr.ok) {
-                            await logRiskEvent(env.DB, subject, "bad_sign", (vr.code || "") + ": " + (vr.message || ""));
-                            return new Response(JSON.stringify({
-                                error: "请求签名校验失败",
-                                code: vr.code,
-                                detail: vr.message,
-                            }), {
-                                status: 403,
-                                headers: { "Content-Type": "application/json", ...corsHeaders },
-                            });
-                        }
-                    }
-
-                    // 2) 行为风控: 频次突增 + MID 遍历识别
-                    let riskMids = [];
-                    const midParam = riskUrl.searchParams.get("mid");
-                    if (midParam) {
-                        riskMids = midParam.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
-                    }
-                    const verdict = await inspectRequest(env.DB, subject, path, riskMids);
-                    if (verdict.action === "block") {
-                        return new Response(JSON.stringify({
-                            error: "请求已被风控拦截",
-                            reason: verdict.reason,
-                            retryAfter: verdict.remain || 0,
-                        }), {
-                            status: 429,
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Retry-After": String(verdict.remain || 0),
-                                ...corsHeaders,
-                            },
-                        });
-                    }
-                } catch (e) {
-                    // 风控故障不影响主流程
-                    console.error("[Risk] 风控检查异常(已放行):", e);
                 }
             }
 
