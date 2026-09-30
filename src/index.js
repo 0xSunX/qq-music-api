@@ -438,11 +438,23 @@ function generateConsoleHtml(totalCount) {
 </div>
 <script>
 (function(){
-  function getDeviceId(){
-    var k='mtDeviceId', v=localStorage.getItem(k);
-    if(!v){ v='web-'+Math.random().toString(36).slice(2,10)+Date.now().toString(36); localStorage.setItem(k, v); }
+  // [DEVICE-SYNC] getFingerprint/ensureDeviceId/getDeviceId 在以下四处保持一致, 改动需同改:
+  //   src/index.js, src/api/admin/page.js, src/api/admin/cache.js, src/api/admin/risk.js
+  // 调试台与控制台同页但分属不同 IIFE, 保留同口径实现; 登录已写入签发值, 同步读取即可。
+  function getFingerprint(){
+    var k='mtFingerprint', v=localStorage.getItem(k);
+    if(!v){ v='web-'+Math.random().toString(36).slice(2,10)+Date.now().toString(36)+Math.random().toString(36).slice(2,10); localStorage.setItem(k,v); }
     return v;
   }
+  function ensureDeviceId(){
+    var cached=localStorage.getItem('mtDeviceId');
+    if(cached && cached.indexOf('.')>0){ return Promise.resolve(cached); }
+    return fetch('/api/user?action=device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fingerprint:getFingerprint()})})
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,d:d}; }); })
+      .then(function(res){ if(res.ok&&res.d&&res.d.deviceId){ try{localStorage.setItem('mtDeviceId',res.d.deviceId);}catch(e){} return res.d.deviceId; } var fb=getFingerprint(); try{localStorage.setItem('mtDeviceId',fb);}catch(e){} return fb; })
+      .catch(function(){ return getFingerprint(); });
+  }
+  function getDeviceId(){ return localStorage.getItem('mtDeviceId') || getFingerprint(); }
   var APIS = [
     {group:'音乐业务',docKey:'doc-search',tip:'搜索',path:'/api/search',method:'GET',desc:'搜索歌曲/歌手/专辑/歌单(公开, 无需登录; 按 IP 限流 30 次/分钟)',params:[{k:'keyword',v:'周杰伦',req:1},{k:'type',v:'song'},{k:'num',v:'10'},{k:'page',v:'1'}]},
     {group:'音乐业务',docKey:'doc-songurl',tip:'播放链接',path:'/api/song/url',method:'GET',desc:'获取歌曲播放链接(多音质自动降级)',params:[{k:'mid',v:'0039MnYb0qxYhV',req:1},{k:'quality',v:'320'}]},
@@ -679,9 +691,15 @@ function generateConsoleHtml(totalCount) {
     if(hit && !headersEl.value.trim()){ headersEl.value = hit; }
   }
   sel.addEventListener('change', function(){ renderParams(); applyDefaultBody(); applyHeaderHint(); });
-  renderParams();
-  applyDefaultBody();
-  applyHeaderHint();
+  // 初始化包异常保护: 任一环节报错不再静默, 直接回显到状态栏, 避免"下拉空白且无提示"
+  try {
+    if(sel.options.length > 0){ sel.selectedIndex = 0; }
+    renderParams();
+    applyDefaultBody();
+    applyHeaderHint();
+  } catch(err){
+    if(statusEl){ statusEl.textContent = '调试台初始化异常: ' + (err && err.message ? err.message : err); }
+  }
   btn.addEventListener('click', doSend);
   document.getElementById('at-reset').addEventListener('click', function(){ renderParams(); applyDefaultBody(); });
   document.getElementById('at-goto').addEventListener('click', function(){
