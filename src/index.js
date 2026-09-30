@@ -572,10 +572,7 @@ function generateConsoleHtml(totalCount) {
     o.textContent = a.method + '  ' + a.path + (a.tip ? '  · ' + a.tip : '');
     ogMap[g].appendChild(o);
   });
-  // 注: 本函数内联于模板字符串, 严禁在注释或正则里写反斜杠u、反斜杠x转义(会被模板层提前消费, 破坏语法与正则边界)。
-  // 用 RegExp 构造 < 字符, 绕开反斜杠转义。
-  var LT_RE = new RegExp(String.fromCharCode(60), 'g');
-  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(LT_RE,'&lt;').replace(/>/g,'&gt;'); }
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/\u003c/g,'&lt;').replace(/>/g,'&gt;'); }
   function jesc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function hlJson(txt){
     var s = jesc(String(txt));
