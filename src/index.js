@@ -263,11 +263,29 @@ function generateConsoleHtml(totalCount) {
 </div>
 <script>
 (function(){
-  function getDeviceId(){
-    var k='mtDeviceId', v=localStorage.getItem(k);
-    if(!v){ v='web-'+Math.random().toString(36).slice(2,10)+Date.now().toString(36); localStorage.setItem(k, v); }
+  // [DEVICE-SYNC] getFingerprint/ensureDeviceId/getDeviceId 在以下四处保持一致, 改动需同改:
+  //   src/index.js, src/api/admin/page.js, src/api/admin/cache.js, src/api/admin/risk.js
+  // 稳定设备指纹(客户端生成一次, 持久化), 用于向服务端换取签名的 deviceId
+  function getFingerprint(){
+    var k='mtFingerprint', v=localStorage.getItem(k);
+    if(!v){ v='web-'+Math.random().toString(36).slice(2,10)+Date.now().toString(36)+Math.random().toString(36).slice(2,10); localStorage.setItem(k, v); }
     return v;
   }
+  // 获取服务端签发的 deviceId。服务端配置 DEVICE_SECRET 后, 登录/鉴权必须用签发值,
+  // 裸指纹会被判"设备标识无效"。已签发的缓存复用; 未配置 DEVICE_SECRET(503)时回退裸指纹, 兼容旧部署。
+  function ensureDeviceId(){
+    var cached = localStorage.getItem('mtDeviceId');
+    if(cached && cached.indexOf('.') > 0){ return Promise.resolve(cached); }
+    return fetch('/api/user?action=device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fingerprint:getFingerprint()})})
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,d:d}; }); })
+      .then(function(res){
+        if(res.ok && res.d && res.d.deviceId){ try{ localStorage.setItem('mtDeviceId', res.d.deviceId); }catch(e){} return res.d.deviceId; }
+        var fb = getFingerprint(); try{ localStorage.setItem('mtDeviceId', fb); }catch(e){} return fb;
+      })
+      .catch(function(){ return getFingerprint(); });
+  }
+  // 同步读取当前 deviceId(退出登录等场景用)
+  function getDeviceId(){ return localStorage.getItem('mtDeviceId') || getFingerprint(); }
   var gate=document.getElementById('gate');
   function setMsg(t,c){ var m=document.getElementById('gMsg'); m.textContent=t; m.style.color=c||'#888'; }
   function showConsole(){ gate.style.display='none'; var c=document.querySelector('.c'); if(c) c.style.display=''; }
@@ -291,6 +309,8 @@ function generateConsoleHtml(totalCount) {
   }
   function initConsole(){
     if(localStorage.getItem('adminToken')){ showConsole(); return; }
+    // 已确认过站点已初始化: 直接展示登录框, 跳过 status 探测, 消除刷新时的跳转顿感
+    if(localStorage.getItem('siteInitialized')==='1'){ return; }
     // 未登录: 先探测站点是否已初始化, 未初始化则引导去 /api/setup, 而不是死等登录
     fetch('/api/setup?status=1').then(function(r){ return r.json(); }).then(function(d){
       if(d && d.initialized === false){ showInitGuide(); }
@@ -316,13 +336,17 @@ function generateConsoleHtml(totalCount) {
     var p=document.getElementById('gPass').value;
     if(!u||!p){ setMsg('请输入用户名和密码','#f44'); return; }
     setMsg('登录中...');
-    fetch('/api/user?action=login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,deviceId:getDeviceId()})})
-    .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
-    .then(function(res){
-      if(!res.ok){ setMsg(res.d.error||'登录失败','#f44'); return; }
-      if(!res.d.user||res.d.user.role!=='admin'){ setMsg('该账号不是管理员','#f44'); return; }
-      localStorage.setItem('adminToken',res.d.token);
-      showConsole();
+    // 先确保拿到服务端签发的 deviceId, 再登录; 否则配置了 DEVICE_SECRET 会被判设备无效
+    ensureDeviceId().then(function(devId){
+      return fetch('/api/user?action=login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,deviceId:devId})})
+      .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
+      .then(function(res){
+        if(!res.ok){ setMsg(res.d.error||'登录失败','#f44'); return; }
+        if(!res.d.user||res.d.user.role!=='admin'){ setMsg('该账号不是管理员','#f44'); return; }
+        localStorage.setItem('adminToken',res.d.token);
+        try{ localStorage.setItem('siteInitialized','1'); }catch(e){}
+        showConsole();
+      }).catch(function(e){ setMsg('异常: '+e.message,'#f44'); });
     }).catch(function(e){ setMsg('异常: '+e.message,'#f44'); });
   };
 })();
@@ -885,35 +909,44 @@ export default {
                 if (statsEndpoints.includes(path)) {
                     if (currentUser.role !== "admin") {
                         // 普通用户用其 daily_limit; VIP 用户固定 VIP_DAILY_LIMIT
+                        // daily_limit<=0 视为无限制(仅计数, 不做限额判断), 与管理员语义统一
                         const limit = currentUser.level === "vip" ? VIP_DAILY_LIMIT : currentUser.daily_limit;
-                        // 原子占用配额(检查+递增), 业务失败再回滚
-                        const ok = await reserveUsage(env.DB, currentUser.id, limit);
-                        if (!ok) {
-                            return new Response(JSON.stringify({
-                                error: "Daily limit reached",
-                                limit: limit,
-                            }), {
-                                status: 429,
-                                headers: { "Content-Type": "application/json", ...corsHeaders },
-                            });
+                        if (limit <= 0) {
+                            // 无限制用户: 仅计数, 异步后台写, 不阻塞响应
+                            const usageJob = countUsage(env.DB, currentUser.id).catch(function(e){ console.error("计数失败:", e); });
+                            if (ctx && ctx.waitUntil) { try { ctx.waitUntil(usageJob); } catch (e) { await usageJob; } }
+                            else { await usageJob; }
+                        } else {
+                            // 原子占用配额(检查+递增), 业务失败再回滚
+                            const ok = await reserveUsage(env.DB, currentUser.id, limit);
+                            if (!ok) {
+                                return new Response(JSON.stringify({
+                                    error: "Daily limit reached",
+                                    limit: limit,
+                                }), {
+                                    status: 429,
+                                    headers: { "Content-Type": "application/json", ...corsHeaders },
+                                });
+                            }
+                            usageReserved = true;
                         }
-                        usageReserved = true;
                     } else {
-                        // 管理员: 不限流, 但一样计入调用统计; 业务失败不回滚
-                        try { await countUsage(env.DB, currentUser.id); } catch (e) { console.error("计数失败:", e); }
+                        // 管理员: 不限流, 但一样计入调用统计; 业务失败不回滚。
+                        // 计数异步后台写, 不阻塞响应尾延迟
+                        const usageJob = countUsage(env.DB, currentUser.id).catch(function(e){ console.error("计数失败:", e); });
+                        if (ctx && ctx.waitUntil) { try { ctx.waitUntil(usageJob); } catch (e) { await usageJob; } }
+                        else { await usageJob; }
                     }
                 }
             }
 
             // 统计 API 调用次数
             if (env.DB && statsEndpoints.includes(path)) {
-                // 在本地开发或无 waitUntil 支持的环境下，直接 await
-                // 为了确保计数准确，这里改为 await，虽然会微弱增加响应时间
-                try {
-                    await incrementCount(env.DB, path);
-                } catch (e) {
-                    console.error("统计计数失败:", e);
-                }
+                // 统计计数非业务必需: 丢给 ctx.waitUntil 后台写, 不阻塞响应尾延迟。
+                // 错误在后台任务内自行捕获, 避免 unhandled rejection; 无 ctx(本地 dev) 时兜底 await。
+                const statJob = incrementCount(env.DB, path).catch(function(e){ console.error("统计计数失败:", e); });
+                if (ctx && ctx.waitUntil) { try { ctx.waitUntil(statJob); } catch (e) { await statJob; } }
+                else { await statJob; }
             }
 
             let resp;

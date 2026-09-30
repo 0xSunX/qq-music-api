@@ -114,11 +114,13 @@ export async function onRequest(context) {
         if (action === "me") {
             if (!user) return errorResponse("Unauthorized", 401);
             const used = await getUsageToday(env.DB, user.id);
+            // daily_limit<=0 视为无限制(与 index.js 配额分支一致): remaining 回 -1, 而不是算成 0
+            const unlimited = user.role === "admin" || (user.level !== "vip" && (!user.daily_limit || user.daily_limit <= 0));
             return jsonResponse({
                 code: 0,
                 user: publicUser(user),
                 usageToday: used,
-                remaining: user.role === "admin" ? -1 : Math.max(0, (user.level === "vip" ? VIP_DAILY_LIMIT : user.daily_limit) - used),
+                remaining: unlimited ? -1 : Math.max(0, (user.level === "vip" ? VIP_DAILY_LIMIT : user.daily_limit) - used),
             });
         }
 

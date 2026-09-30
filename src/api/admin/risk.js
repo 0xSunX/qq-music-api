@@ -196,11 +196,22 @@ tr:hover{background:#222}
   var token=localStorage.getItem('adminToken')||'';
   var statusEl=document.getElementById('status');
   var curSign=0;
-  function getDeviceId(){
-    var k='mtDeviceId', v=localStorage.getItem(k);
-    if(!v){ v='web-'+Math.random().toString(36).slice(2,10)+Date.now().toString(36); localStorage.setItem(k, v); }
+  // [DEVICE-SYNC] getFingerprint/ensureDeviceId/getDeviceId 在以下四处保持一致, 改动需同改:
+  //   src/index.js, src/api/admin/page.js, src/api/admin/cache.js, src/api/admin/risk.js
+  function getFingerprint(){
+    var k='mtFingerprint', v=localStorage.getItem(k);
+    if(!v){ v='web-'+Math.random().toString(36).slice(2,10)+Date.now().toString(36)+Math.random().toString(36).slice(2,10); localStorage.setItem(k,v); }
     return v;
   }
+  function ensureDeviceId(){
+    var cached=localStorage.getItem('mtDeviceId');
+    if(cached && cached.indexOf('.')>0){ return Promise.resolve(cached); }
+    return fetch('/api/user?action=device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fingerprint:getFingerprint()})})
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,d:d}; }); })
+      .then(function(res){ if(res.ok&&res.d&&res.d.deviceId){ try{localStorage.setItem('mtDeviceId',res.d.deviceId);}catch(e){} return res.d.deviceId; } var fb=getFingerprint(); try{localStorage.setItem('mtDeviceId',fb);}catch(e){} return fb; })
+      .catch(function(){ return getFingerprint(); });
+  }
+  function getDeviceId(){ return localStorage.getItem('mtDeviceId') || getFingerprint(); }
   function api(action, opts){
     var url='/api/admin/risk?action='+action;
     var init=opts||{};
@@ -325,7 +336,7 @@ tr:hover{background:#222}
     if(!confirm('确认清空全部风控事件?')) return;
     api('clearevents',{method:'POST',body:'{}'}).then(function(res){ setStatus(res.ok?'事件已清空':'失败', !res.ok); loadStats(); });
   };
-  if(token){ loadStats(); loadConfig(); loadBlocks(); }
+  if(token){ ensureDeviceId().then(function(){ loadStats(); loadConfig(); loadBlocks(); }); }
   else { setStatus('未登录, 请先到 /admin 登录', true); }
 })();
 </script>

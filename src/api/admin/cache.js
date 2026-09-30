@@ -155,7 +155,11 @@ tr:hover{background:#222}
   var token=localStorage.getItem('adminToken')||'', kwEl=document.getElementById('kw');
   var statusEl=document.getElementById('status'), rowsEl=document.getElementById('rows');
   var tblEl=document.getElementById('tbl'), pagerEl=document.getElementById('pager'), pageinfoEl=document.getElementById('pageinfo');
-  function getDeviceId(){ var k='mtDeviceId', v=localStorage.getItem(k); if(!v){ v='web-'+Math.random().toString(36).slice(2,10)+Date.now().toString(36); localStorage.setItem(k,v);} return v; }
+  // [DEVICE-SYNC] getFingerprint/ensureDeviceId/getDeviceId 在以下四处保持一致, 改动需同改:
+  //   src/index.js, src/api/admin/page.js, src/api/admin/cache.js, src/api/admin/risk.js
+  function getFingerprint(){ var k='mtFingerprint', v=localStorage.getItem(k); if(!v){ v='web-'+Math.random().toString(36).slice(2,10)+Date.now().toString(36)+Math.random().toString(36).slice(2,10); localStorage.setItem(k,v);} return v; }
+  function ensureDeviceId(){ var cached=localStorage.getItem('mtDeviceId'); if(cached && cached.indexOf('.')>0){ return Promise.resolve(cached); } return fetch('/api/user?action=device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fingerprint:getFingerprint()})}).then(function(r){ return r.json().then(function(d){ return {ok:r.ok,d:d}; }); }).then(function(res){ if(res.ok&&res.d&&res.d.deviceId){ try{localStorage.setItem('mtDeviceId',res.d.deviceId);}catch(e){} return res.d.deviceId; } var fb=getFingerprint(); try{localStorage.setItem('mtDeviceId',fb);}catch(e){} return fb; }).catch(function(){ return getFingerprint(); }); }
+  function getDeviceId(){ return localStorage.getItem('mtDeviceId') || getFingerprint(); }
   function api(qs, opts){ var url='/api/admin/cache?'+qs; var t=token.trim(); var init=opts||{}; init.headers=Object.assign({'Authorization':'Bearer '+t,'Content-Type':'application/json','X-Device-Id':getDeviceId()}, init.headers||{}); return fetch(url,init).then(function(r){ return r.json().then(function(d){ return {ok:r.ok,status:r.status,data:d}; }); }); }
   function setStatus(m,e){ statusEl.textContent=m; statusEl.style.color=e?'#f44':'#888'; }
   function fmtTime(ts){ if(!ts) return '-'; return new Date(ts*1000).toLocaleString(); }
@@ -201,7 +205,7 @@ tr:hover{background:#222}
   document.getElementById('back').onclick=function(){ location.href='/admin'; };
   document.getElementById('clear').onclick=function(){ if(!confirm('确定清空全部缓存? 不可恢复')) return; api('action=clear',{method:'POST',body:'{}'}).then(function(res){ if(!res.ok){ setStatus('清空失败: '+(res.data.error||res.status),true); return; } setStatus('缓存已清空'); PAGE=1; loadList(); loadStats(); }); };
   document.getElementById('resetmem').onclick=function(){ if(!confirm('重置本实例内存层统计计数? (不影响缓存内容)')) return; api('action=resetmem',{method:'POST',body:'{}'}).then(function(res){ if(!res.ok){ setStatus('重置失败: '+(res.data.error||res.status),true); return; } setStatus('内存统计已重置'); loadStats(); }); };
-  if(token){ loadStats(); loadDist(); loadList(); } else { setStatus('未登录, 请先到 /admin 登录',true); }
+  if(token){ ensureDeviceId().then(function(){ loadStats(); loadDist(); loadList(); }); } else { setStatus('未登录, 请先到 /admin 登录',true); }
 })();
 </script>
 </body>

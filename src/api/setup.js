@@ -9,10 +9,19 @@
 import { jsonResponse, errorResponse, handleOptions } from "../lib/request.js";
 import { ensureUserTables, hashPassword, randomHex } from "../lib/user.js";
 
+// 只缓存"已初始化=true"的结果(正向缓存): 站点一旦建了 admin 极少回退,
+// 但未初始化时绝不能缓存, 否则刚建完 admin 会被短时误判为未初始化。
+let _initCache = { v: false, ts: 0 };
+const INIT_CACHE_TTL_MS = 10000;
+
 async function isInitialized(db) {
+    const now = Date.now();
+    if (_initCache.v === true && (now - _initCache.ts) < INIT_CACHE_TTL_MS) return true;
     try {
         const row = await db.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'admin'").first();
-        return !!(row && row.c > 0);
+        const v = !!(row && row.c > 0);
+        _initCache = { v: v, ts: now };
+        return v;
     } catch (e) {
         // 表不存在视为未初始化
         return false;
@@ -84,9 +93,11 @@ export async function onRequest(context) {
             const hash = await hashPassword(password, salt);
             const now = Math.floor(Date.now() / 1000);
             const adminDevice = "setup-" + randomHex(8);
+            // 初始管理员: daily_limit=0 表示无限制(配额分支按无限处理), max_quality='master' 解除音质上限。
+            // 旧代码写 100000 是"很大但有限", 与"管理员不限"的语义不符; 改为 0 显式表达无限制。
             const r = await env.DB.prepare(
-                `INSERT INTO users (username, password_hash, salt, role, level, device_id, daily_limit, created_at, updated_at)
-                 VALUES (?, ?, ?, 'admin', 'vip', ?, 100000, ?, ?)`
+                `INSERT INTO users (username, password_hash, salt, role, level, device_id, daily_limit, max_quality, created_at, updated_at)
+                 VALUES (?, ?, ?, 'admin', 'vip', ?, 0, 'master', ?, ?)`
             ).bind(username, hash, salt, adminDevice, now, now).run();
 
             // 重建单行表默认数据: 上方清库清掉了行, 不重建会导致相关 UPDATE 命中 0 行而静默失效
@@ -117,7 +128,21 @@ export async function onRequest(context) {
     const inited = await isInitialized(env.DB);
     // ?status=1 只返回 JSON, 供控制台登录门前置判断, 不返回 HTML
     if (new URL(request.url).searchParams.get("status") === "1") {
-        return jsonResponse({ code: 0, initialized: inited, setupKeyConfigured: !!env.SETUP_KEY });
+        // 只读体检: 报告关键 Secret 与凭证是否就绪, 便于部署后一眼看出缺什么。
+        // 只回布尔, 不回密钥内容, 也不会把密钥写进页面。
+        let credentialSeeded = false;
+        try {
+            const cRow = await env.DB.prepare("SELECT COUNT(*) AS c FROM credentials WHERE id = 1 AND musickey IS NOT NULL AND musickey != ''").first();
+            credentialSeeded = !!(cRow && cRow.c > 0);
+        } catch (e) { /* 表不存在视为未种子 */ }
+        return jsonResponse({
+            code: 0,
+            initialized: inited,
+            setupKeyConfigured: !!env.SETUP_KEY,
+            deviceSecretConfigured: !!env.DEVICE_SECRET,
+            requestSecretConfigured: !!env.REQUEST_SECRET,
+            credentialSeeded: credentialSeeded,
+        });
     }
     return new Response(generateHtml(inited), {
         headers: { "Content-Type": "text/html; charset=utf-8" },
@@ -191,8 +216,31 @@ button:disabled{background:#333;color:#666;cursor:not-allowed}
   kField.appendChild(kLabel);
   kField.appendChild(kInput);
   go.parentNode.insertBefore(kField, go);
+  var chkEl=document.createElement('div');
+  chkEl.id='chk';
+  chkEl.className='steps';
+  go.parentNode.insertBefore(chkEl, kField);
   // 探测服务端是否配置 SETUP_KEY, 未配置直接提示并禁用按钮
+  function renderChecklist(d){
+    var items=[
+      ['SETUP_KEY', d.setupKeyConfigured, '站点初始化密钥', false],
+      ['DEVICE_SECRET', d.deviceSecretConfigured, '设备签名密钥', false],
+      ['REQUEST_SECRET', d.requestSecretConfigured, '请求签名密钥', true],
+      ['INITIAL_CREDENTIAL', d.credentialSeeded, '音乐凭证种子', true]
+    ];
+    var html='<b>部署自检:</b><br>';
+    for(var i=0;i<items.length;i++){
+      var ok=items[i][1]===true, optional=items[i][3];
+      var mark=ok?'✅':(optional?'⚪':'❌');
+      var color=ok?'#31c27c':(optional?'#888':'#f44');
+      html+='<span style="color:'+color+'">'+mark+' '+items[i][0]+' — '+items[i][2]+'</span>';
+      if(!ok&&!optional){ html+='<br><span style="color:#f44;padding-left:1.2em">请去 Cloudflare Dashboard → Settings → Variables and Secrets 补配</span>'; }
+      html+='<br>';
+    }
+    var el=document.getElementById('chk'); if(el){ el.innerHTML=html; }
+  }
   fetch('/api/setup?status=1').then(function(r){ return r.json(); }).then(function(d){
+    if(d){ renderChecklist(d); }
     if(d && d.setupKeyConfigured === false){
       kInput.disabled = true;
       go.disabled = true;

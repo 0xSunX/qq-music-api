@@ -54,7 +54,7 @@ Fork 此仓库到你的 GitHub 账户。
    - ① 配好 `REQUEST_SECRET` 这个 Secret；
    - ② 登录后台 → 控制台「🛡 风控防护」→ 点「切换请求签名校验」打开开关（对应 `risk_config.req_sign_enabled = 1`）。
    两个条件都满足，服务端才会校验请求头 `X-Req-Sign` / `X-Req-Ts` / `X-Req-Nonce`；只配 Secret 不开开关、或只开开关没配 Secret，签名校验都会被自动跳过，不会误伤线上。
-3. **签名算法**：客户端对 `method + "\n" + path + "\n" + ts + "\n" + nonce + "\n" + sha256Hex(body)` 做 HMAC-SHA256（小写 hex）；时间窗 ±300 秒；nonce 落 `req_nonce` 表防重放，重复即拒。
+3. **签名算法**：客户端对 `method + "\n" + path + "\n" + ts + "\n" + nonce + "\n" + sha256Hex(body)` （注意：canonical 里的 `path` 需含按参数名排序后的 query 串，如 `/api/song/url?mid=..&quality=..`，query 已纳入签名以防参数被篡改）做 HMAC-SHA256（小写 hex）；时间窗 ±300 秒；nonce 落 `req_nonce` 表防重放，重复即拒。
 4. **⚠️ 开启前必读**：一旦开关打开，**所有访问私有业务端点（`/api/song/*`、`/api/lyric`、`/api/album`、`/api/playlist`、`/api/singer`、`/api/credential/refresh`、`/api/user?action=me|logout|appopen`）的客户端都必须带合法签名**，否则返回 403。老客户端若未适配签名逻辑会直接不可用——建议确认客户端已支持、或先灰度，再开这个开关。
 
 ### 6. 初始化

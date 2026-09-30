@@ -58,6 +58,21 @@ export async function buildSignature(secret, method, path, ts, nonce, body) {
  * @param {D1Database} db
  * @returns {Promise<{ok:boolean, code?:string, message?:string}>}
  */
+/**
+ * 构造参与签名的规范路径: pathname + 排序后的查询串。
+ * 将 query 纳入签名, 修复 GET 参数可被中间人篡改而不破坏签名的问题;
+ * 查询参数按键名排序, 保证同一组参数顺序不同也能得到相同签名。
+ */
+export function canonicalPath(url) {
+    const params = [];
+    try { for (const [k, v] of url.searchParams) params.push([k, v]); }
+    catch (e) { return url.pathname; }
+    if (!params.length) return url.pathname;
+    params.sort(function(a, b){ return a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0); });
+    const qs = params.map(function(p){ return encodeURIComponent(p[0]) + '=' + encodeURIComponent(p[1]); }).join('&');
+    return url.pathname + '?' + qs;
+}
+
 export async function verifyRequestSignature(request, secret, db) {
     if (!secret) return { ok: false, code: 'SIGN_DISABLED', message: '服务端未配置 REQUEST_SECRET' };
     await ensureNonceTable(db);
@@ -84,7 +99,7 @@ export async function verifyRequestSignature(request, secret, db) {
         try { body = await request.clone().text(); } catch (e) { body = ''; }
     }
     const url = new URL(request.url);
-    const expect = await buildSignature(secret, request.method, url.pathname, ts, nonce, body);
+    const expect = await buildSignature(secret, request.method, canonicalPath(url), ts, nonce, body);
     if (expect !== sig) {
         return { ok: false, code: 'SIGN_INVALID', message: '签名校验失败' };
     }

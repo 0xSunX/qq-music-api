@@ -13,8 +13,16 @@ export const VIP_DAILY_LIMIT = 1000;
 export const DEFAULT_MAX_QUALITY = '320';
 // 音质由低到高排序, 用于比较用户音质上限与请求音质
 export const QUALITY_LEVELS = ['128', '320', 'flac', 'atmos_51', 'atmos_2', 'master'];
+// 音质别名归一: 'atmos' 与 'atmos_2' 同档。
+// 避免别名被 qualityRank 判为 -1(未知音质), 从而在 /api/song/url 里被当成"未知音质"
+// 错误地抬到上限音质, 造成权限判定不一致。
+const QUALITY_ALIASES = { atmos: 'atmos_2' };
+export function normalizeQuality(q) {
+    const v = String(q || '').toLowerCase();
+    return QUALITY_ALIASES[v] || v;
+}
 export function qualityRank(q) {
-    const i = QUALITY_LEVELS.indexOf(String(q || '').toLowerCase());
+    const i = QUALITY_LEVELS.indexOf(normalizeQuality(q));
     return i < 0 ? -1 : i;
 }
 
@@ -564,7 +572,8 @@ export async function updateUserInfo(db, userId, fields = {}) {
 
     if (fields.dailyLimit !== undefined) {
         const lim = parseInt(fields.dailyLimit, 10);
-        if (!Number.isInteger(lim) || lim < 1 || lim > 100000) throw new Error('日限额需为 1-100000 的整数');
+        // 0 表示无限制(与初始管理员 daily_limit=0 及 index.js 配额分支保持一致)
+        if (!Number.isInteger(lim) || lim < 0 || lim > 1000000) throw new Error('日限额需为 0-1000000 的整数(0 表示无限制)');
         sets.push('daily_limit = ?');
         binds.push(lim);
     }

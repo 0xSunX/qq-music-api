@@ -8,7 +8,7 @@ import { getGuid, parseQuality, SongFileType, API_CONFIG } from "../../lib/commo
 import { getCredential } from "../../lib/credential.js";
 import { generateSign } from "../../lib/sign.js";
 import { ensureUrlCacheTable, getCachedUrls, saveCachedUrl, validateUrl, recordCacheHit, recordCacheMiss } from "../../lib/urlcache.js";
-import { qualityRank, DEFAULT_MAX_QUALITY } from "../../lib/user.js";
+import { qualityRank, normalizeQuality, DEFAULT_MAX_QUALITY } from "../../lib/user.js";
 
 /**
  * 音质降级顺序
@@ -118,7 +118,8 @@ export async function onRequest(context) {
         if (user && user.role !== 'admin' && user.level !== 'vip') {
             userMaxQuality = String(user.max_quality || DEFAULT_MAX_QUALITY).toLowerCase();
         }
-        let startQuality = requestedQuality.toLowerCase();
+        // 先做别名归一(atmos -> atmos_2), 保证权限比较与降级队列都用同一档位
+        let startQuality = normalizeQuality(requestedQuality);
         if (userMaxQuality) {
             const rReq = qualityRank(startQuality);
             const rMax = qualityRank(userMaxQuality);
