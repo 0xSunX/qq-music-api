@@ -778,6 +778,7 @@ export default {
             return new Response(generateConsoleHtml(totalCount), {
                 headers: {
                     "Content-Type": "text/html; charset=utf-8",
+                    "Cache-Control": "no-store, must-revalidate",
                     ...corsHeaders,
                 },
             });
@@ -788,6 +789,7 @@ export default {
             return new Response(adminCache.renderPage(), {
                 headers: {
                     "Content-Type": "text/html; charset=utf-8",
+                    "Cache-Control": "no-store, must-revalidate",
                     ...corsHeaders,
                 },
             });
@@ -798,6 +800,7 @@ export default {
             return new Response(adminRisk.renderPage(), {
                 headers: {
                     "Content-Type": "text/html; charset=utf-8",
+                    "Cache-Control": "no-store, must-revalidate",
                     ...corsHeaders,
                 },
             });
