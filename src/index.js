@@ -214,8 +214,8 @@ function generateConsoleHtml(totalCount) {
         footer{margin-top:50px;text-align:center;color:#444;font-size:.85rem}
         a{color:#31c27c;text-decoration:none}
         .at-in,.at-btn,.at-resp{width:100%;background:#181818;border:1px solid #333;color:#e0e0e0;border-radius:4px;padding:8px;font-size:.9rem;font-family:ui-monospace,Menlo,Consolas,monospace}
-        .at-in{margin-bottom:8px;color:#6A8759}
-        .at-in::placeholder{color:#5a5a5a;font-style:italic}
+        .at-in{margin-bottom:8px;color:#6A8759;font-weight:600}
+        .at-in::placeholder{color:#9aa4b0;font-style:italic;font-weight:400}
         .at-in:focus{border-color:#31c27c;outline:none;box-shadow:0 0 0 2px rgba(49,194,124,.15)}
         .at-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
         .at-row label{min-width:104px;color:#E8BF6A;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1rem;font-weight:600;letter-spacing:.3px}

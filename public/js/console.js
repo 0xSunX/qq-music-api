@@ -19,19 +19,22 @@
     })(obj);
     return out;
   }
-  // 在 textarea 中, 把光标所在/紧邻的占位值整体选中, 便于直接粘贴覆盖
-  function selectPlaceholderAt(el, phList) {
+  // 点击占位提示时, 直接删除该占位值, 光标停在原位, 用户可直接输入
+  // (类似 IDE 参数提示: 点提示即消失, 而不是整体选中)
+  function clearPlaceholderAt(el, phList) {
     if (!el || !phList || !phList.length) return false;
     var val = el.value, pos = el.selectionStart, hit = null;
     phList.forEach(function (ph) {
       var idx = val.indexOf(ph);
       while (idx >= 0) {
-        if (pos >= idx && pos <= idx + ph.length) { hit = { s: idx, e: idx + ph.length }; }
+        if (pos >= idx && pos <= idx + ph.length) { hit = { s: idx, e: idx + ph.length }; break; }
         idx = val.indexOf(ph, idx + 1);
       }
     });
-    if (hit) { try { el.setSelectionRange(hit.s, hit.e); } catch (e) {} return true; }
-    return false;
+    if (!hit) return false;
+    el.value = val.slice(0, hit.s) + val.slice(hit.e);
+    try { el.setSelectionRange(hit.s, hit.s); } catch (e) {}
+    return true;
   }
 
   var APIS = [
@@ -277,8 +280,8 @@
       return;
     }
     if (bodyBox) {
-      bodyBox.addEventListener('click', function () { if (selectPlaceholderAt(bodyBox, _bodyPh)) syncBodyHl(); });
-      bodyBox.addEventListener('focus', function () { if (!selectPlaceholderAt(bodyBox, _bodyPh)) { try { this.select(); } catch (e) {} } });
+      bodyBox.addEventListener('click', function () { if (clearPlaceholderAt(bodyBox, _bodyPh)) syncBodyHl(); });
+      bodyBox.addEventListener('focus', function () { clearPlaceholderAt(bodyBox, _bodyPh); });
       bodyBox.addEventListener('input', syncBodyHl);
       bodyBox.addEventListener('scroll', function () { if (bodyHl) { bodyHl.scrollTop = bodyBox.scrollTop; bodyHl.scrollLeft = bodyBox.scrollLeft; } });
     }
@@ -287,7 +290,7 @@
     var resetBtn = $('at-reset'); if (resetBtn) resetBtn.addEventListener('click', function () { renderParams(); applyDefaultBody(); });
     var copyUrlBtn = $('at-copy-url'); if (copyUrlBtn) copyUrlBtn.addEventListener('click', function () { var u = location.origin + buildUrl(); copy(u); if (statusEl) statusEl.textContent = '已复制 URL: ' + u; });
     var copyRespBtn = $('at-copy-resp'); if (copyRespBtn) copyRespBtn.addEventListener('click', function () { copy(resp ? resp.textContent : ''); if (statusEl) statusEl.textContent = '已复制响应结果'; });
-    if (headersEl) headersEl.addEventListener('focus', function () { try { this.select(); } catch (e) {} });
+    if (headersEl) headersEl.addEventListener('focus', function () { if (_lastAutoHeader && headersEl.value.trim() === _lastAutoHeader.trim()) { headersEl.value = ''; _lastAutoHeader = ''; } });
     var gotoBtn = $('at-goto'); if (gotoBtn) gotoBtn.addEventListener('click', function () {
       var api = APIS[sel.value]; if (!api) return;
       var el = null;
