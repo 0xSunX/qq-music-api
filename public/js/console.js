@@ -4,7 +4,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var sel = $('at-endpoint'), pbox = $('at-params'), resp = $('at-resp'), btn = $('at-send');
   var descEl = $('at-desc'), statusEl = $('at-status'), bodyWrap = $('at-body-wrap');
-  var bodyBox = $('at-body'), bodyHl = $('at-body-hl'), headersEl = $('at-headers');
+  var bodyBox = $('at-body'), bodyHl = $('at-body-hl'), headersEl = $('at-headers'), headersHl = $('at-headers-hl');
   var NL = String.fromCharCode(10);
 
   // 收集 Body 预设对象里所有非空字符串值(占位提示), 用于聚焦时定位
@@ -24,16 +24,37 @@
   function clearPlaceholderAt(el, phList) {
     if (!el || !phList || !phList.length) return false;
     var val = el.value, pos = el.selectionStart, hit = null;
+    // 优先: 光标正好落在某个占位串内 -> 只删该占位, 光标停在原位
     phList.forEach(function (ph) {
+      if (hit || !ph) return;
       var idx = val.indexOf(ph);
       while (idx >= 0) {
         if (pos >= idx && pos <= idx + ph.length) { hit = { s: idx, e: idx + ph.length }; break; }
         idx = val.indexOf(ph, idx + 1);
       }
     });
-    if (!hit) return false;
-    el.value = val.slice(0, hit.s) + val.slice(hit.e);
-    try { el.setSelectionRange(hit.s, hit.s); } catch (e) {}
+    if (hit) {
+      el.value = val.slice(0, hit.s) + val.slice(hit.e);
+      try { el.setSelectionRange(hit.s, hit.s); } catch (e) {}
+      return true;
+    }
+    // 兜底: 首次点按未聚焦时光标未落位 -> 只清光标所在行内的占位, 不误伤其它字段
+    var lineStart = val.lastIndexOf(NL, Math.max(0, pos - 1));
+    lineStart = (lineStart < 0 && pos === 0) ? 0 : lineStart + 1;
+    var lineEnd = val.indexOf(NL, lineStart);
+    if (lineEnd < 0) lineEnd = val.length;
+    var before = val.slice(0, lineStart), seg = val.slice(lineStart, lineEnd), after = val.slice(lineEnd);
+    var list = phList.slice().sort(function (a, b) { return b.length - a.length; });
+    var changed = false;
+    for (var i = 0; i < list.length; i++) {
+      var ph = list[i]; if (!ph) continue;
+      var j = seg.indexOf(ph); if (j < 0) continue;
+      seg = seg.slice(0, j) + seg.slice(j + ph.length);
+      changed = true;
+    }
+    if (!changed) return false;
+    el.value = before + seg + after;
+    try { el.setSelectionRange(lineStart, lineStart); } catch (e) {}
     return true;
   }
 
@@ -58,7 +79,7 @@
     { group: '凭证管理', docKey: 'doc-admincred', tip: '凭证(写)', path: '/api/admin/credential', method: 'POST', desc: '[admin] 写入/更新凭证', params: [] },
     { group: '用户系统', docKey: 'doc-register', tip: '注册', path: '/api/user', method: 'POST', desc: '注册账号(公开)', params: [{k:'action',v:'register'}] },
     { group: '用户系统', docKey: 'doc-login', tip: '登录', path: '/api/user', method: 'POST', desc: '登录(公开, 必须带 deviceId)', params: [{k:'action',v:'login'}] },
-    { group: '用户系统', docKey: 'doc-logout', tip: '登出', path: '/api/user', method: 'POST', desc: '登出(需 token)', params: [{k:'action',v:'logout'}] },
+    { group: '用户系统', docKey: 'doc-logout', tip: '登出', path: '/api/user', method: 'POST', desc: '登出(需 Authorization: Bearer token + X-Device-Id, 无 Body)', params: [{k:'action',v:'logout'}] },
     { group: '用户系统', docKey: 'doc-me', tip: '我的信息', path: '/api/user', method: 'GET', desc: '当前用户信息与今日用量(需 token)', params: [{k:'action',v:'me'}] },
     { group: '用户系统', docKey: 'doc-device', tip: '设备签发', path: '/api/user', method: 'POST', desc: '签发设备标识(公开)', params: [{k:'action',v:'device'}] },
     { group: '用户管理', docKey: 'doc-adminusers-list', tip: '用户列表', path: '/api/admin/users', method: 'GET', desc: '[admin] 用户列表', params: [{k:'action',v:'list'},{k:'page',v:'1'},{k:'size',v:'20'}] },
@@ -90,13 +111,14 @@
   var DEFAULT_BODIES = {
     '注册': { username: '你的用户名', password: '你的密码', deviceId: '设备标识' },
     '登录': { username: '你的用户名', password: '你的密码', deviceId: '设备标识(必填)' },
-    '登出': {},
-    '设备签发': { fingerprint: '客户端稳定设备指纹' },
     '改用户等级': { userId: 2, level: 'vip' },
     '禁用/启用': { userId: 2, status: 1 },
     '删除用户': { userId: 2 },
     '更新用户': { userId: 2, password: '新密码', maxQuality: '320', level: 'normal' },
-    '凭证(写)': { openid: '', musicid: '', musickey: '', refresh_token: '', login_type: 2 },
+    '凭证(写)': { openid: 'QQ音乐OpenID', musicid: 'QQ号(数字)', musickey: 'MusicKey', refresh_token: '刷新令牌', login_type: 2 },
+    '设备签发': { fingerprint: '设备指纹(6-128位稳定字符串)' },
+    '登出': {},
+    '我的信息': {},
     '初始化(写)': { username: 'admin', password: 'admin123' },
     '公告(写)': { id: 'notice_1', type: 'popup', level: 'info', title: '标题', content: '正文', enabled: true },
     '更新配置(写)': { platform: 'android', channel: 'official', latestVersion: '1.3.0', latestBuild: 130 }
@@ -121,6 +143,15 @@
     });
   }
   function syncBodyHl() { if (bodyHl) bodyHl.innerHTML = hlJson(bodyBox.value || '') + NL; }
+  // 请求头高亮: 每行 "Key: Value", 键/值分别着色, 其余行灰显
+  function hlHeaders(txt) {
+    return String(txt || '').split(/\r?\n/).map(function (line) {
+      var m = line.match(/^(\s*)([^:\s][^:]*)(:)([\s\S]*)$/);
+      if (!m) return '<span class="at-dim">' + esc(line) + '</span>';
+      return m[1] + '<span class="jk">' + esc(m[2]) + '</span><span class="at-dim">:</span><span class="js">' + esc(m[4]) + '</span>';
+    }).join(NL);
+  }
+  function syncHeadersHl() { if (headersHl) headersHl.innerHTML = hlHeaders(headersEl ? headersEl.value : '') + NL; }
   function copy(t) {
     if (navigator.clipboard) { navigator.clipboard.writeText(t); }
     else { var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
@@ -255,11 +286,13 @@
     }
     var preset = HEADER_PRESET[api.path];
     if (preset) {
-      headersEl.value = preset;
+      // 已存在同名头则不再重复预填, 避免覆盖用户已填的 SETUP_KEY
+      if (headersEl.value.indexOf('X-Setup-Key') < 0) headersEl.value = preset;
       _lastAutoHeader = preset;
     } else {
       _lastAutoHeader = '';
     }
+    syncHeadersHl();
   }
 
   function init() {
@@ -281,7 +314,11 @@
     }
     if (bodyBox) {
       bodyBox.addEventListener('click', function () { if (clearPlaceholderAt(bodyBox, _bodyPh)) syncBodyHl(); });
-      bodyBox.addEventListener('focus', function () { clearPlaceholderAt(bodyBox, _bodyPh); });
+      // focus 后补一次(等光标落位), 修复首次点按占位不消失
+      bodyBox.addEventListener('focus', function () {
+        if (clearPlaceholderAt(bodyBox, _bodyPh)) syncBodyHl();
+        setTimeout(function () { if (clearPlaceholderAt(bodyBox, _bodyPh)) syncBodyHl(); }, 0);
+      });
       bodyBox.addEventListener('input', syncBodyHl);
       bodyBox.addEventListener('scroll', function () { if (bodyHl) { bodyHl.scrollTop = bodyBox.scrollTop; bodyHl.scrollLeft = bodyBox.scrollLeft; } });
     }
@@ -290,7 +327,11 @@
     var resetBtn = $('at-reset'); if (resetBtn) resetBtn.addEventListener('click', function () { renderParams(); applyDefaultBody(); });
     var copyUrlBtn = $('at-copy-url'); if (copyUrlBtn) copyUrlBtn.addEventListener('click', function () { var u = location.origin + buildUrl(); copy(u); if (statusEl) statusEl.textContent = '已复制 URL: ' + u; });
     var copyRespBtn = $('at-copy-resp'); if (copyRespBtn) copyRespBtn.addEventListener('click', function () { copy(resp ? resp.textContent : ''); if (statusEl) statusEl.textContent = '已复制响应结果'; });
-    if (headersEl) headersEl.addEventListener('focus', function () { if (_lastAutoHeader && headersEl.value.trim() === _lastAutoHeader.trim()) { headersEl.value = ''; _lastAutoHeader = ''; } });
+    if (headersEl) {
+      headersEl.addEventListener('input', syncHeadersHl);
+      headersEl.addEventListener('scroll', function () { if (headersHl) { headersHl.scrollTop = headersEl.scrollTop; headersHl.scrollLeft = headersEl.scrollLeft; } });
+      headersEl.addEventListener('focus', function () { try { this.select(); } catch (e) {} });
+    }
     var gotoBtn = $('at-goto'); if (gotoBtn) gotoBtn.addEventListener('click', function () {
       var api = APIS[sel.value]; if (!api) return;
       var el = null;
@@ -310,6 +351,7 @@
     renderParams();
     applyHeaderHint();
     applyDefaultBody();
+    syncHeadersHl();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

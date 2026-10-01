@@ -261,6 +261,8 @@ function generateConsoleHtml(totalCount) {
         #at-endpoint{background:#1e1e1e;border-color:#3c3c3c;color:#4ec9b0;font-weight:600}
         .at-body,.at-body-ov{background:transparent;color:transparent;caret-color:#4ec9b0;border-color:transparent}
         .at-body{border-color:transparent}
+        .at-body-ov::placeholder{color:#9aa4b0;font-style:italic;font-weight:400;opacity:1}
+        .at-hl{pointer-events:none}
         #backTop{position:fixed;right:16px;bottom:16px;z-index:9999;width:44px;height:44px;border-radius:50%;background:#31c27c;color:#000;border:none;font-size:20px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;transition:transform .2s ease,opacity .2s ease;opacity:.95}
         @media (max-width:600px){ #backTop{right:12px;bottom:80px;width:42px;height:42px} }
         #backTop:hover{transform:translateY(-3px);opacity:1}
@@ -308,7 +310,10 @@ function generateConsoleHtml(totalCount) {
             <button id="at-goto">定位说明</button>
         </div>
         <div class="at-desc at-label-hi">请求头 · 按所选接口自动提示，点框可全选直接粘贴</div>
-        <textarea id="at-headers" class="at-in" style="min-height:56px;resize:vertical;box-sizing:border-box;margin-bottom:8px" placeholder="每行一条 Key: Value（粘贴后提示自动消失）&#10;X-Device-Id 已自动带上，无需手填&#10;/api/setup 需：X-Setup-Key: 你的SETUP_KEY"></textarea>
+        <div class="at-body-wrap2">
+            <pre id="at-headers-hl" class="at-hl"></pre>
+            <textarea id="at-headers" class="at-body at-body-ov" style="min-height:56px;resize:vertical" placeholder="每行一条 Key: Value（粘贴后提示自动消失）&#10;X-Device-Id 已自动带上，无需手填&#10;/api/setup 需：X-Setup-Key: 你的SETUP_KEY"></textarea>
+        </div>
 
         <button id="at-send" class="at-btn">发送请求</button>
         <div class="at-status" id="at-status">就绪</div>
