@@ -247,9 +247,9 @@ function generateConsoleHtml(totalCount) {
         #at-endpoint{color:#4facfe;font-weight:600;letter-spacing:.2px}
         #at-endpoint option{color:#e0e0e0;background:#181818}
         .at-resp{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;font-size:.9rem!important;line-height:1.55}
-        .at-body-wrap2{position:relative;margin-bottom:8px}
-        .at-hl{position:absolute;inset:0;margin:0;padding:8px;background:#181818;border:1px solid #333;border-radius:4px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;overflow:auto;pointer-events:none;color:#e0e0e0;tab-size:2}
-        .at-body-ov{position:relative;z-index:2;background:transparent;color:transparent;caret-color:#31c27c;min-height:120px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;tab-size:2}
+        .at-body-wrap2{position:relative;margin-bottom:8px;max-height:400px;overflow:auto}
+        .at-hl{position:static;display:block;margin:0;padding:8px;background:#181818;border:1px solid #333;border-radius:4px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;pointer-events:none;color:#e0e0e0;tab-size:2;box-sizing:border-box}
+        .at-body-ov{position:absolute;top:0;left:0;z-index:2;width:100%;background:transparent;color:transparent;caret-color:#31c27c;min-height:120px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;tab-size:2;border:1px solid transparent;border-radius:4px;padding:8px;box-sizing:border-box;overflow:hidden;resize:none}
         /* 代码高亮配色 —— 参照 MT 语法(Metro/Darcula 深色主题) */
         .jk{color:#CC7832}.js{color:#6A8759}.jn{color:#6897BB}.jb{color:#9876AA}
         .jp{color:#E8BF6A;font-weight:600}.jm{color:#BBB529}
@@ -298,7 +298,7 @@ function generateConsoleHtml(totalCount) {
         <div id="at-params"></div>
         <div id="at-body-wrap" style="display:none">
             <div class="at-desc">POST Body (JSON)</div>
-            <div style="position:relative">
+            <div class="at-body-wrap2">
                 <pre id="at-body-hl" class="at-hl"></pre>
                 <textarea id="at-body" class="at-body at-body-ov"></textarea>
             </div>
@@ -312,7 +312,7 @@ function generateConsoleHtml(totalCount) {
         <div class="at-desc at-label-hi">请求头 · 按所选接口自动提示，点框可全选直接粘贴</div>
         <div class="at-body-wrap2">
             <pre id="at-headers-hl" class="at-hl"></pre>
-            <textarea id="at-headers" class="at-body at-body-ov" style="min-height:56px;resize:vertical" placeholder="每行一条 Key: Value（粘贴后提示自动消失）&#10;X-Device-Id 已自动带上，无需手填&#10;/api/setup 需：X-Setup-Key: 你的SETUP_KEY"></textarea>
+            <textarea id="at-headers" class="at-body at-body-ov" style="min-height:56px" placeholder="每行一条 Key: Value（粘贴后提示自动消失）&#10;X-Device-Id 已自动带上，无需手填&#10;/api/setup 需：X-Setup-Key: 你的SETUP_KEY"></textarea>
         </div>
 
         <button id="at-send" class="at-btn">发送请求</button>

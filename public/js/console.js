@@ -128,11 +128,10 @@
   }
   function syncBodyHl() {
     if (!bodyHl) return;
-    // 关键: 重写 innerHTML 会让 <pre> 的 scrollTop 归零, 与透明 textarea 的滚动错位,
-    // 表现为"光标/文字漂移, 滚一下才对上"。先存滚动位置, 写完再还原。
-    var st = bodyHl.scrollTop, sl = bodyHl.scrollLeft;
+    // 滚动统一交给外层 .at-body-wrap2: 高亮层在正常流撑开高度, textarea 绝对定位覆盖同高,
+    // 两层共享同一坐标系, 从根上消除"各自滚动错位导致的光标漂移"。
     bodyHl.innerHTML = hlJson(bodyBox.value || '') + NL;
-    bodyHl.scrollTop = st; bodyHl.scrollLeft = sl;
+    if (bodyBox) bodyBox.style.height = bodyHl.offsetHeight + 'px';
   }
   // 请求头高亮: 每行 "Key: Value", 键/值分别着色, 其余行灰显
   function hlHeaders(txt) {
@@ -144,9 +143,8 @@
   }
   function syncHeadersHl() {
     if (!headersHl) return;
-    var st = headersHl.scrollTop, sl = headersHl.scrollLeft;
     headersHl.innerHTML = hlHeaders(headersEl ? headersEl.value : '') + NL;
-    headersHl.scrollTop = st; headersHl.scrollLeft = sl;
+    if (headersEl) headersEl.style.height = headersHl.offsetHeight + 'px';
   }
   function copy(t) {
     if (navigator.clipboard) { navigator.clipboard.writeText(t); }
@@ -322,7 +320,7 @@
         setTimeout(function () { if (clearPlaceholderAt(bodyBox, _bodyPh)) syncBodyHl(); }, 0);
       });
       bodyBox.addEventListener('input', syncBodyHl);
-      bodyBox.addEventListener('scroll', function () { if (bodyHl) { bodyHl.scrollTop = bodyBox.scrollTop; bodyHl.scrollLeft = bodyBox.scrollLeft; } });
+      // 不再监听 textarea 滚动: 已统一由外层 .at-body-wrap2 滚动, 两层自动同步
     }
     sel.addEventListener('change', function () { renderParams(); applyDefaultBody(); });
     if (btn) btn.addEventListener('click', doSend);
@@ -331,7 +329,7 @@
     var copyRespBtn = $('at-copy-resp'); if (copyRespBtn) copyRespBtn.addEventListener('click', function () { copy(resp ? resp.textContent : ''); if (statusEl) statusEl.textContent = '已复制响应结果'; });
     if (headersEl) {
       headersEl.addEventListener('input', syncHeadersHl);
-      headersEl.addEventListener('scroll', function () { if (headersHl) { headersHl.scrollTop = headersEl.scrollTop; headersHl.scrollLeft = headersEl.scrollLeft; } });
+      // 同上: 请求头滚动统一由外层容器负责
       headersEl.addEventListener('focus', function () {
         // 聚焦时把"自动附带"的请求头写进输入框, 便于查看与手动修改(仅当框为空时填充, 不覆盖已填内容)
         if (!this.value.trim()) {
