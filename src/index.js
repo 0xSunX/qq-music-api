@@ -530,6 +530,7 @@ function generateConsoleHtml(totalCount) {
     return out;
   }
   function applyDefaultBody(){
+    if(!sel || !bodyBox){ return; }
     var api = APIS[sel.value];
     if(!api){ return; }
     if(api.method === 'POST'){
@@ -556,23 +557,32 @@ function generateConsoleHtml(totalCount) {
   var bodyHl = document.getElementById('at-body-hl');
   var headersEl = document.getElementById('at-headers');
   function syncBodyHl(){ if(bodyHl){ bodyHl.innerHTML = hlJson(bodyBox.value || '') + NL; } }
-  bodyBox.addEventListener('input', syncBodyHl);
-  bodyBox.addEventListener('scroll', function(){ if(bodyHl){ bodyHl.scrollTop = bodyBox.scrollTop; bodyHl.scrollLeft = bodyBox.scrollLeft; } });
+  // 关键: 先把接口列表塞进下拉框(独立 try), 即使后续绑定出错, 下拉也能展开; 不再让 null.addEventListener 打断整个初始化
   var docMap = {};
-  APIS.forEach(function(a){ if(a.group && a.docKey && !docMap[a.docKey]) docMap[a.docKey] = a.docKey; });
-  var ogMap = {};
-  APIS.forEach(function(a,i){
-    var g = a.group || '其他';
-    if(!ogMap[g]){
-      ogMap[g] = document.createElement('optgroup');
-      ogMap[g].label = g;
-      sel.appendChild(ogMap[g]);
-    }
-    var o = document.createElement('option');
-    o.value = i;
-    o.textContent = a.method + '  ' + a.path + (a.tip ? '  · ' + a.tip : '');
-    ogMap[g].appendChild(o);
-  });
+  try {
+    APIS.forEach(function(a){ if(a.group && a.docKey && !docMap[a.docKey]) docMap[a.docKey] = a.docKey; });
+    if(!sel){ throw new Error('未找到下拉容器 #at-endpoint'); }
+    var ogMap = {};
+    APIS.forEach(function(a,i){
+      var g = a.group || '其他';
+      if(!ogMap[g]){
+        ogMap[g] = document.createElement('optgroup');
+        ogMap[g].label = g;
+        sel.appendChild(ogMap[g]);
+      }
+      var o = document.createElement('option');
+      o.value = i;
+      o.textContent = a.method + '  ' + a.path + (a.tip ? '  · ' + a.tip : '');
+      ogMap[g].appendChild(o);
+    });
+  } catch(e){
+    console.error('[Tester] 下拉初始化异常:', e);
+    if(statusEl){ statusEl.textContent = '下拉初始化异常: ' + (e && e.message ? e.message : e); }
+  }
+  if(bodyBox){
+    bodyBox.addEventListener('input', syncBodyHl);
+    bodyBox.addEventListener('scroll', function(){ if(bodyHl){ bodyHl.scrollTop = bodyBox.scrollTop; bodyHl.scrollLeft = bodyBox.scrollLeft; } });
+  }
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/\u003c/g,'&lt;').replace(/>/g,'&gt;'); }
   function jesc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function hlJson(txt){
@@ -654,6 +664,7 @@ function generateConsoleHtml(totalCount) {
     if(tk) hdrs['Authorization'] = 'Bearer ' + tk;
     if(!hdrs['X-Device-Id']) hdrs['X-Device-Id'] = getDeviceId();
     if(api.method === 'POST'){
+      if(!bodyBox){ if(statusEl){ statusEl.textContent = 'Body 容器缺失, 无法发送 POST'; } return; }
       var raw = bodyBox.value.trim() || '{}';
       try { JSON.parse(raw); } catch(e){ statusEl.innerHTML = '\u003cspan class="err"\u003eBody JSON 格式错误\u003c/span\u003e'; return; }
       hdrs['Content-Type'] = 'application/json';
@@ -683,13 +694,13 @@ function generateConsoleHtml(totalCount) {
     '/api/user?action=device': ''
   };
   function applyHeaderHint(){
-    if(!headersEl) return;
+    if(!headersEl || !sel) return;
     var api = APIS[sel.value];
     if(!api) return;
     var hit = HEADER_HINTS[api.path];
     if(hit && !headersEl.value.trim()){ headersEl.value = hit; }
   }
-  sel.addEventListener('change', function(){ renderParams(); applyDefaultBody(); applyHeaderHint(); });
+  if(sel) sel.addEventListener('change', function(){ renderParams(); applyDefaultBody(); applyHeaderHint(); });
   // 初始化包异常保护: 任一环节报错不再静默, 直接回显到状态栏, 避免"下拉空白且无提示"
   try {
     if(sel.options.length > 0){ sel.selectedIndex = 0; }
@@ -699,9 +710,10 @@ function generateConsoleHtml(totalCount) {
   } catch(err){
     if(statusEl){ statusEl.textContent = '调试台初始化异常: ' + (err && err.message ? err.message : err); }
   }
-  btn.addEventListener('click', doSend);
-  document.getElementById('at-reset').addEventListener('click', function(){ renderParams(); applyDefaultBody(); });
-  document.getElementById('at-goto').addEventListener('click', function(){
+  if(btn) btn.addEventListener('click', doSend);
+  var resetBtn = document.getElementById('at-reset'); if(resetBtn) resetBtn.addEventListener('click', function(){ renderParams(); applyDefaultBody(); });
+  var gotoBtn = document.getElementById('at-goto'); if(gotoBtn) gotoBtn.addEventListener('click', function(){
+    if(!sel) return;
     var api = APIS[sel.value];
     if(!api) return;
     var el = null;
@@ -721,13 +733,13 @@ function generateConsoleHtml(totalCount) {
     setTimeout(function(){ el.classList.remove('flash'); }, 1500);
     statusEl.textContent = '已定位: ' + api.path;
   });
-  document.getElementById('at-copy-url').addEventListener('click', function(){
+  var copyUrlBtn = document.getElementById('at-copy-url'); if(copyUrlBtn) copyUrlBtn.addEventListener('click', function(){
     var u = location.origin + buildUrl();
     copy(u);
     statusEl.textContent = '已复制 URL: ' + u;
   });
-  document.getElementById('at-copy-resp').addEventListener('click', function(){
-    copy(resp.textContent);
+  var copyRespBtn = document.getElementById('at-copy-resp'); if(copyRespBtn) copyRespBtn.addEventListener('click', function(){
+    copy(resp ? resp.textContent : '');
     statusEl.textContent = '已复制响应结果';
   });
 })();
