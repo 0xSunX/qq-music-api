@@ -11,6 +11,7 @@ import {
     getCredentialFromDB,
     saveCredentialToDB,
 } from "../../lib/credential.js";
+import { listRefreshLogs, getLastRefresh, getRefreshStats } from "../../lib/refreshlog.js";
 import { jsonResponse, errorResponse, handleOptions } from "../../lib/request.js";
 
 export async function onRequest(context) {
@@ -44,6 +45,23 @@ export async function onRequest(context) {
     }
 
     if (request.method === "GET") {
+        // 刷新日志子资源: ?action=last|logs|stats (admin 专属)
+        const url = new URL(request.url);
+        const action = url.searchParams.get("action") || "";
+        if (action === "last") {
+            const last = await getLastRefresh(env.DB);
+            return jsonResponse({ last: last || null });
+        }
+        if (action === "stats") {
+            const days = parseInt(url.searchParams.get("days") || "30", 10) || 30;
+            return jsonResponse({ stats: await getRefreshStats(env.DB, days) });
+        }
+        if (action === "logs") {
+            const page = parseInt(url.searchParams.get("page") || "1", 10) || 1;
+            const size = Math.min(parseInt(url.searchParams.get("size") || "20", 10) || 20, 100);
+            const r = await listRefreshLogs(env.DB, page, size);
+            return jsonResponse({ page, size, total: r.total, list: r.list });
+        }
         // 管理侧回传完整凭证(admin 专属, 不脱敏)
         const credential = await getCredentialFromDB(env.DB);
         if (!credential) return jsonResponse({ credential: null });

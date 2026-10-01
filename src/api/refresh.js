@@ -18,6 +18,7 @@ import { cleanStaleRegisterRate, cleanStaleIpRate, cleanStaleLoginRate } from ".
 import { cleanStaleDeviceRegistry } from "../lib/device.js";
 import { cleanStaleRisk } from "../lib/risk.js";
 import { cleanStaleNonce } from "../lib/reqsign.js";
+import { logRefresh, cleanStaleRefreshLog } from "../lib/refreshlog.js";
 
 /**
  * 刷新凭证
@@ -95,7 +96,7 @@ async function refreshCredential(credential) {
  * @param {boolean} force 强制刷新
  * @returns {Promise<object>}
  */
-async function doRefresh(db, force = false, envCredential = null) {
+async function doRefresh(db, force = false, envCredential = null, trigger = 'cron') {
     await ensureCredentialTable(db);
 
     // 环境变量仅作首次种子: 库为空时用它初始化, 库非空不覆盖
@@ -113,6 +114,7 @@ async function doRefresh(db, force = false, envCredential = null) {
 
     const credential = await getCredentialFromDB(db);
     if (!credential) {
+        await logRefresh(db, { trigger, success: false, reason: "未找到凭证" });
         return { success: false, message: "未找到凭证,请设置 INITIAL_CREDENTIAL 或通过 /admin 写入" };
     }
 
@@ -143,10 +145,12 @@ async function doRefresh(db, force = false, envCredential = null) {
 
         await saveCredentialToDB(db, updatedCredential);
 
+        await logRefresh(db, { trigger, success: true, reason: "凭证刷新成功", expireHours: Math.floor(remainingTime / 3600) });
         console.log("[Refresh] 凭证刷新成功");
         return { success: true, message: "凭证刷新成功" };
     }
 
+    await logRefresh(db, { trigger, success: true, reason: "凭证有效期充足, 无需刷新", expireHours: Math.floor(remainingTime / 3600) });
     return { success: true, message: "凭证有效期充足，无需刷新" };
 }
 
@@ -158,10 +162,11 @@ export async function onSchedule(context) {
 
     try {
         console.log("[Cron] 开始检查凭证状态...");
-        const result = await doRefresh(env.DB, false, env.INITIAL_CREDENTIAL);
+        const result = await doRefresh(env.DB, false, env.INITIAL_CREDENTIAL, 'cron');
         console.log(`[Cron] ${result.message}`);
     } catch (err) {
         console.error("[Cron] 刷新凭证失败:", err);
+        await logRefresh(env.DB, { trigger: 'cron', success: false, reason: '刷新异常: ' + (err && err.message ? err.message : err) });
     }
 
     // 链接缓存改为"请求时校验有效性", 不再定时删除
@@ -219,6 +224,14 @@ export async function onSchedule(context) {
     } catch (err) {
         console.error("[Cron] 清理请求签名 nonce 失败:", err);
     }
+
+    // 清理过期的凭证刷新日志, 防止 refresh_log 无限膨胀 (保留最近 30 天)
+    try {
+        const removedLog = await cleanStaleRefreshLog(env.DB, 30);
+        console.log(`[Cron] 已清理 ${removedLog} 条过期刷新日志`);
+    } catch (err) {
+        console.error("[Cron] 清理刷新日志失败:", err);
+    }
 }
 
 /**
@@ -240,10 +253,11 @@ export async function onRequest(context) {
         const url = new URL(request.url);
         const force = url.searchParams.get("force") === "true";
 
-        const result = await doRefresh(env.DB, force, env.INITIAL_CREDENTIAL);
+        const result = await doRefresh(env.DB, force, env.INITIAL_CREDENTIAL, 'manual');
         return jsonResponse(result);
     } catch (err) {
         console.error("刷新凭证失败:", err);
+        await logRefresh(env.DB, { trigger: 'manual', success: false, reason: err && err.message ? err.message : String(err) });
         return errorResponse(err.message, 500);
     }
 }

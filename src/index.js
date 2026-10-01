@@ -23,6 +23,7 @@ import * as adminUsers from "./api/admin/users.js";
 import * as adminPage from "./api/admin/page.js";
 import * as adminCache from "./api/admin/cache.js";
 import * as adminRisk from "./api/admin/risk.js";
+import * as adminCredPage from "./api/admin/credpage.js";
 import * as setup from "./api/setup.js";
 import { ensureStatsTable, incrementCount, getTotalCount, getAllStats } from "./lib/stats.js";
 import { ensureUserTables, verifySession, reserveUsage, releaseUsage, countUsage, checkIpRate, VIP_DAILY_LIMIT } from "./lib/user.js";
@@ -59,12 +60,13 @@ const routes = {
     "/api/admin/cache": adminCache,
     "/api/admin/risk": adminRisk,
     "/admin/risk": adminRisk,
+    "/admin/credential": adminCredPage,
     "/api/setup": setup,
 };
 
 // 免鉴权的公开路由(register/login 额外豁免)
 // /admin 是控制台页面, 前端密码登录; /admin/users 复用同一 token
-const PUBLIC_ROUTES = ["/admin", "/admin/users", "/admin/cache", "/admin/risk", "/api/setup", "/api/app/update", "/api/app/notice", "/api/search", "/api/top"];
+const PUBLIC_ROUTES = ["/admin", "/admin/users", "/admin/cache", "/admin/risk", "/admin/credential", "/api/setup", "/api/app/update", "/api/app/notice", "/api/search", "/api/top"];
 // 需 admin 角色的数据接口(登录后仍要校验角色, 统一以 [admin] 前缀标注)
 const ADMIN_ROUTES = ["/api/admin/users", "/api/admin/credential", "/api/admin/appconfig", "/api/admin/cache", "/api/admin/risk"];
 
@@ -216,7 +218,7 @@ function generateConsoleHtml(totalCount) {
         .at-in::placeholder{color:#5a5a5a;font-style:italic}
         .at-in:focus{border-color:#31c27c;outline:none;box-shadow:0 0 0 2px rgba(49,194,124,.15)}
         .at-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
-        .at-row label{min-width:90px;color:#CC7832;font-family:monospace;font-size:.85rem}
+        .at-row label{min-width:104px;color:#E8BF6A;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1rem;font-weight:600;letter-spacing:.3px}
         .at-btn{cursor:pointer;background:linear-gradient(135deg,#31c27c,#26a86a);color:#04150d;border:none;font-weight:700;letter-spacing:.5px;padding:12px;margin-top:8px;border-radius:8px;box-shadow:0 4px 14px rgba(49,194,124,.28);transition:transform .15s ease,box-shadow .15s ease,filter .15s ease}
         .at-btn:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(49,194,124,.42);filter:brightness(1.06)}
         .at-btn:active{transform:translateY(0);box-shadow:0 3px 10px rgba(49,194,124,.3)}
@@ -229,7 +231,8 @@ function generateConsoleHtml(totalCount) {
         .at-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.72rem;font-weight:700;vertical-align:middle}
         .at-get{background:#31c27c;color:#000}
         .at-post{background:#f0a020;color:#000}
-        .at-desc{color:#888;font-size:.82rem;margin:4px 0 8px}
+        .at-desc{color:#9aa4b0;font-size:.88rem;margin:6px 0 8px}
+        .at-label-hi{color:#E8BF6A;font-weight:600}
         .at-body{width:100%;min-height:96px;background:#181818;border:1px solid #333;color:#e0e0e0;border-radius:4px;padding:8px;font-size:.85rem;font-family:monospace;margin-bottom:8px;resize:vertical}
         .at-status{font-family:monospace;font-size:.8rem;color:#666;margin:6px 0;word-break:break-all}
         .at-status .ok{color:#31c27c;font-weight:700}
@@ -281,6 +284,7 @@ function generateConsoleHtml(totalCount) {
         <a href="/admin/users" class="nav-btn">👥 用户管理</a>
         <a href="/admin/cache" class="nav-btn">🗃 缓存列表</a>
         <a href="/admin/risk" class="nav-btn">🛡 风控防护</a>
+        <a href="/admin/credential" class="nav-btn">🔑 凭证管理</a>
         <a href="/" class="nav-btn">🏠 网站首页</a>
         <button id="adminLogout" class="nav-logout">🚪 退出登录</button>
     </div>
@@ -303,7 +307,7 @@ function generateConsoleHtml(totalCount) {
             <button id="at-copy-resp">复制结果</button>
             <button id="at-goto">定位说明</button>
         </div>
-        <div class="at-desc">自定义请求头 (每行一条: Key: Value, 例如 X-Setup-Key)</div>
+        <div class="at-desc at-label-hi">请求头 · 按所选接口自动提示，点框可全选直接粘贴</div>
         <textarea id="at-headers" class="at-in" style="min-height:56px;resize:vertical;box-sizing:border-box;margin-bottom:8px" placeholder="每行一条 Key: Value（粘贴后提示自动消失）&#10;X-Device-Id 已自动带上，无需手填&#10;/api/setup 需：X-Setup-Key: 你的SETUP_KEY"></textarea>
 
         <button id="at-send" class="at-btn">发送请求</button>

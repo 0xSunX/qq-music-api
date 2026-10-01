@@ -7,7 +7,7 @@ import { batchRequest, jsonResponse, errorResponse, handleOptions, buildCookies 
 import { getGuid, parseQuality, SongFileType, API_CONFIG } from "../../lib/common.js";
 import { getCredential } from "../../lib/credential.js";
 import { generateSign } from "../../lib/sign.js";
-import { ensureUrlCacheTable, getCachedUrls, saveCachedUrl, validateUrl, recordCacheHit, recordCacheMiss } from "../../lib/urlcache.js";
+import { ensureUrlCacheTable, getCachedUrls, saveCachedUrlsBatch, validateUrl, recordCacheHit, recordCacheMiss } from "../../lib/urlcache.js";
 import { qualityRank, normalizeQuality, DEFAULT_MAX_QUALITY } from "../../lib/user.js";
 
 /**
@@ -219,9 +219,10 @@ export async function onRequest(context) {
         // 回写缓存(仅缓存非空链接), 并行写入减少串行等待
         if (env.DB) {
             try {
-                await Promise.all(reqMids
+                // 批量写: 单次 db.batch() 提交, D1 往返从 N 次压到 1 次
+                await saveCachedUrlsBatch(env.DB, reqMids
                     .filter(function(mid){ return !!urls[mid]; })
-                    .map(function(mid){ return saveCachedUrl(env.DB, mid, requestedQuality, urls[mid], actualQuality); }));
+                    .map(function(mid){ return { mid: mid, quality: requestedQuality, url: urls[mid], actualQuality: actualQuality }; }));
             } catch (e) {
                 console.error("写入链接缓存失败:", e);
             }

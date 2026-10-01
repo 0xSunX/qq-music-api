@@ -79,7 +79,7 @@ export async function onRequest(context) {
 
             // 清空所有业务表(逐表执行, 失败记录到 warnings, 不再静默吞掉)
             // 覆盖全部业务表, 含风控/签名相关表; 新表必须同步加入, 否则初始化后残留旧数据
-            const tables = ["credentials", "sessions", "usage_daily", "users", "api_stats", "app_open_daily", "url_cache", "url_cache_stats", "app_notices", "app_releases", "register_rate", "ip_rate", "login_rate", "device_registry", "risk_config", "risk_rate", "risk_mid", "risk_block", "risk_events", "req_nonce"];
+            const tables = ["credentials", "sessions", "usage_daily", "users", "api_stats", "app_open_daily", "url_cache", "url_cache_stats", "app_notices", "app_releases", "register_rate", "ip_rate", "login_rate", "device_registry", "risk_config", "risk_rate", "risk_mid", "risk_block", "risk_events", "req_nonce", "refresh_log"];
             const warnings = [];
             for (const t of tables) {
                 try { await env.DB.prepare("DELETE FROM " + t).run(); }

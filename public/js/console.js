@@ -46,6 +46,22 @@
     { group: '系统维护', docKey: 'doc-setup', tip: '初始化(写)', path: '/api/setup', method: 'POST', desc: '站点初始化(高危, 需 X-Setup-Key)', params: [] }
   ];
 
+  // 参数字段说明字典: 按参数名给出"该填什么", 与所选接口的参数联动显示
+  var FIELD_HINTS = {
+    keyword: '搜索关键词, 如 周杰伦', type: '类型: song/singer/album/playlist/mv/lyric/user',
+    num: '返回数量, 如 10', page: '页码, 从 1 开始',
+    mid: '歌曲MID, 如 0039MnYb0qxYhV', quality: '音质: 128/320/flac/atmos_2/atmos_51/master',
+    id: '数字ID(歌曲/歌单/榜单)', size: '每页条数或图片尺寸(150/300/500/800)',
+    qrc: '1=返回逐字歌词', trans: '1=返回翻译歌词', roma: '1=返回罗马音歌词',
+    platform: '平台: android / ios', version: '版本号, 如 1.0.0', build: '构建号, 如 80',
+    force: 'true=强制刷新凭证', action: '动作标识, 如 list/level/status/delete/update/detail',
+    userId: '目标用户ID(数字)', level: '等级: vip 或 normal', status: '1 启用 / 0 禁用',
+    maxQuality: '最高音质(普通用户生效)', dailyLimit: '日限额, 0=无限制',
+    setupKey: '初始化密钥, 需与服务端 SETUP_KEY 一致',
+    openid: 'QQ音乐 OpenID', musicid: 'QQ号(数字)', musickey: 'MusicKey', refresh_token: '刷新令牌',
+    fingerprint: '设备指纹(6-128位稳定字符串)', username: '用户名(3-20位字母数字下划线)', password: '密码(至少6位)'
+  };
+
   var DEFAULT_BODIES = {
     '注册': { username: '你的用户名', password: '你的密码', deviceId: '设备标识' },
     '登录': { username: '你的用户名', password: '你的密码', deviceId: '设备标识(必填)' },
@@ -94,14 +110,17 @@
     if (descEl) descEl.innerHTML = badge + '<span class="jp">' + esc(api.path) + '</span> ' + esc(api.desc || '');
     (api.params || []).forEach(function (p) {
       var row = document.createElement('div'); row.className = 'at-row';
-      var lab = document.createElement('label'); lab.className = 'at-lab'; lab.textContent = p.k + (p.req ? ' *' : '');
+      var lab = document.createElement('label'); lab.className = 'at-lab';
+      lab.textContent = p.k + (p.req ? ' *' : '');
+      lab.title = p.kh || p.k;
       var inp = document.createElement('input'); inp.className = 'at-in';
-      // 提示语走 placeholder: 聚焦/粘贴时自动消失, 无需手动删除
-      var hint = p.req ? '必填' : '可选';
-      if (p.v) hint += ' · 示例 ' + p.v;
-      inp.placeholder = hint;
+      // 预填可直接使用的真实值: 不改也能直接发; 点进去自动全选, 直接粘贴即替换
+      inp.value = p.v || '';
+      var kh = p.kh || FIELD_HINTS[p.k] || p.k;
+      inp.placeholder = (p.req ? '必填' : '可选') + ' · ' + kh;
       inp.setAttribute('data-k', p.k);
-      inp.setAttribute('title', p.k + (p.v ? '  示例: ' + p.v : ''));
+      inp.setAttribute('title', p.k + (p.kh ? '：' + p.kh : '') + (p.v ? '（默认 ' + p.v + '，点入可直接粘贴替换）' : ''));
+      inp.addEventListener('focus', function () { try { this.select(); } catch (e) {} });
       row.appendChild(lab); row.appendChild(inp); pbox.appendChild(row);
     });
     if (bodyWrap) bodyWrap.style.display = (api.method === 'POST') ? '' : 'none';
@@ -176,16 +195,28 @@
     });
   }
 
-  var HEADER_HINTS = {
+  // 请求头按所选接口联动: value 预填可直接用的行, placeholder 说明该接口需要什么
+  var HEADER_PRESET = {
     '/api/setup': 'X-Setup-Key: ',
-    '/api/user?action=device': ''
+    '/api/admin/credential': '',
+    '/api/admin/users': '',
+    '/api/admin/risk': ''
   };
+  var HEADER_TIP = {
+    '/api/setup': '本接口需请求头 → X-Setup-Key: 你的SETUP_KEY（只填冒号后的密钥，可直接粘贴）',
+    '/api/user?action=device': '公开接口, 无需额外请求头',
+    '/api/admin/credential': '[admin] 无需额外请求头, Authorization 已自动附带',
+    '/api/admin/users': '[admin] 无需额外请求头, Authorization 已自动附带',
+    '/api/admin/risk': '[admin] 无需额外请求头, Authorization 已自动附带'
+  };
+  var HEADER_DEFAULT_TIP = '普通接口无需手填请求头; Authorization 与 X-Device-Id 已自动附加';
   function applyHeaderHint() {
     if (!headersEl || !sel) return;
     var api = APIS[sel.value];
     if (!api) return;
-    var hit = HEADER_HINTS[api.path];
-    if (hit && !headersEl.value.trim()) { headersEl.value = hit; }
+    headersEl.placeholder = HEADER_TIP[api.path] || HEADER_DEFAULT_TIP;
+    var preset = HEADER_PRESET[api.path];
+    if (preset && !headersEl.value.trim()) { headersEl.value = preset; }
   }
 
   function init() {
@@ -206,6 +237,7 @@
       return;
     }
     if (bodyBox) {
+      bodyBox.addEventListener('focus', function () { try { this.select(); } catch (e) {} });
       bodyBox.addEventListener('input', syncBodyHl);
       bodyBox.addEventListener('scroll', function () { if (bodyHl) { bodyHl.scrollTop = bodyBox.scrollTop; bodyHl.scrollLeft = bodyBox.scrollLeft; } });
     }
@@ -214,6 +246,7 @@
     var resetBtn = $('at-reset'); if (resetBtn) resetBtn.addEventListener('click', function () { renderParams(); applyDefaultBody(); });
     var copyUrlBtn = $('at-copy-url'); if (copyUrlBtn) copyUrlBtn.addEventListener('click', function () { var u = location.origin + buildUrl(); copy(u); if (statusEl) statusEl.textContent = '已复制 URL: ' + u; });
     var copyRespBtn = $('at-copy-resp'); if (copyRespBtn) copyRespBtn.addEventListener('click', function () { copy(resp ? resp.textContent : ''); if (statusEl) statusEl.textContent = '已复制响应结果'; });
+    if (headersEl) headersEl.addEventListener('focus', function () { try { this.select(); } catch (e) {} });
     var gotoBtn = $('at-goto'); if (gotoBtn) gotoBtn.addEventListener('click', function () {
       var api = APIS[sel.value]; if (!api) return;
       var el = null;

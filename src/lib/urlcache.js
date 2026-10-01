@@ -26,7 +26,16 @@ function memGet(cacheKey) {
 }
 
 function memSet(cacheKey, url, quality, createdAt) {
-    if (_memCache.size >= MEM_MAX) _memCache.clear();
+    // 满了淘汰最旧的一批(按 Map 插入顺序), 而不是整体清空。
+    // 整体清空会导致雪崩: 一次全废 → 下一波请求全部落 D1 冷查。
+    if (_memCache.size >= MEM_MAX) {
+        const evict = Math.floor(MEM_MAX * 0.2);
+        let n = 0;
+        for (const k of _memCache.keys()) {
+            _memCache.delete(k);
+            if (++n >= evict) break;
+        }
+    }
     _memCache.set(cacheKey, { url: url, quality: quality, createdAt: createdAt, cachedAt: Date.now() });
 }
 
@@ -158,6 +167,31 @@ export async function saveCachedUrl(db, mid, quality, url, actualQuality) {
         .bind(key, mid, quality, url, actualQuality || quality, now).run();
     // 同步写内存, 下次命中零 D1
     memSet(key, url, actualQuality || quality, now);
+}
+
+/**
+ * 批量写入/刷新缓存: 单次 db.batch() 提交多条 upsert, 替代 N 次独立往返。
+ * 批量取链接场景(一次请求多个 mid)时, D1 往返从 N 次压到 1 次。
+ * @param {Array<{mid:string, quality:string, url:string, actualQuality?:string}>} items
+ */
+export async function saveCachedUrlsBatch(db, items) {
+    if (!db || !items || !items.length) return;
+    const now = Math.floor(Date.now() / 1000);
+    const valid = items.filter(function (it) { return it && it.url && it.mid; });
+    if (!valid.length) return;
+    const stmt = db.prepare(`INSERT INTO url_cache (cache_key, mid, quality, url, actual_quality, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(cache_key) DO UPDATE SET
+            url = excluded.url,
+            actual_quality = excluded.actual_quality,
+            created_at = excluded.created_at`);
+    const batch = valid.map(function (it) {
+        const key = it.mid + ":" + it.quality;
+        // 同步写内存, 下次命中零 D1
+        memSet(key, it.url, it.actualQuality || it.quality, now);
+        return stmt.bind(key, it.mid, it.quality, it.url, it.actualQuality || it.quality, now);
+    });
+    await db.batch(batch);
 }
 
 /** 分页列出缓存条目 */
