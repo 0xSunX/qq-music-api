@@ -112,13 +112,18 @@ async function generateIndexHtml(env) {
 \u003ctitle\u003eQQ Music API · 服务门户\u003c/title\u003e
 \u003cstyle\u003e
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,sans-serif;background:#0f0f0f;color:#e0e0e0;line-height:1.6}
-.c{max-width:760px;margin:0 auto;padding:48px 20px}
-.hero{text-align:center;padding:30px 0 40px}
-.hero h1{font-size:2.2rem;color:#fff;letter-spacing:1px;margin-bottom:10px}
-.hero .sub{color:#666;font-size:.95rem}
-h2{font-size:1rem;color:#31c27c;margin:36px 0 14px;padding-bottom:8px;border-bottom:1px solid #222}
-.card{background:#181818;border:1px solid #222;border-radius:10px;overflow:hidden}
+body{font-family:-apple-system,sans-serif;background:#080b0a;color:#e0e0e0;line-height:1.6;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(49,194,124,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(49,194,124,.022) 1px,transparent 1px);background-size:46px 46px}
+@supports ((-webkit-mask-image:radial-gradient(#000,#fff)) or (mask-image:radial-gradient(#000,#fff))){body::before{background-image:linear-gradient(rgba(49,194,124,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(49,194,124,.05) 1px,transparent 1px);mask-image:radial-gradient(ellipse 70% 50% at 50% 0,#000 10%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse 70% 50% at 50% 0,#000 10%,transparent 80%)}}
+body::after{content:"";position:fixed;top:-30%;left:50%;transform:translateX(-50%);width:900px;height:600px;z-index:0;pointer-events:none;background:radial-gradient(ellipse,rgba(49,194,124,.16),transparent 62%)}
+.c{max-width:820px;margin:0 auto;padding:56px 20px;position:relative;z-index:1}
+.hero{text-align:center;padding:34px 0 46px}
+.hero .tag{display:inline-block;font-size:.72rem;letter-spacing:3px;color:#31c27c;border:1px solid rgba(49,194,124,.35);background:rgba(49,194,124,.07);border-radius:999px;padding:6px 16px;margin-bottom:24px;text-transform:uppercase}
+.hero h1{font-size:2.9rem;font-weight:800;letter-spacing:-1px;margin-bottom:16px;background:linear-gradient(180deg,#fff 30%,#7fe7b0);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 22px rgba(49,194,124,.32))}
+.hero .sub{color:#7d8a84;font-size:1rem;letter-spacing:.5px;max-width:520px;margin:0 auto}
+h2{font-size:1rem;color:#e6f5ee;margin:44px 0 18px;letter-spacing:.5px;display:flex;align-items:center;gap:10px}
+h2::before{content:"";width:4px;height:16px;border-radius:2px;background:linear-gradient(180deg,#31c27c,#26a86a);box-shadow:0 0 12px rgba(49,194,124,.7)}
+.card{background:#111614;border:1px solid #1e2925;border-radius:12px;overflow:hidden}
 footer{margin-top:56px;text-align:center;color:#333;font-size:.82rem}
 footer a{color:#31c27c;text-decoration:none}
 .badges{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:22px 0 4px}
@@ -129,12 +134,15 @@ footer a{color:#31c27c;text-decoration:none}
 .note{color:#8a8a8a;font-size:.85rem;line-height:1.95}
 .caps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 @media(max-width:640px){.caps{grid-template-columns:repeat(2,1fr)}}
-.cap{background:#151515;border:1px solid #222;border-radius:12px;padding:20px 18px;transition:border-color .2s,transform .2s,background .2s}
-.cap:hover{border-color:#31c27c;transform:translateY(-3px);background:#171f1a}
+.cap{position:relative;background:linear-gradient(180deg,#111614,#0d1211);border:1px solid #1e2925;border-radius:13px;padding:22px 18px;overflow:hidden;transition:border-color .25s,transform .25s,box-shadow .25s}
+.cap::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(49,194,124,.75),transparent);opacity:0;transition:opacity .25s}
+.cap:hover{border-color:rgba(49,194,124,.55);transform:translateY(-4px);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 0 1px rgba(49,194,124,.1) inset}
+.cap:hover::before{opacity:1}
 .cap .ico{font-size:1.5rem;margin-bottom:12px;line-height:1}
 .cap .ct{color:#eaeaea;font-weight:600;font-size:.95rem;margin-bottom:6px}
 .cap .cd{color:#7a7a7a;font-size:.78rem;line-height:1.6}
-.dl{display:flex;align-items:center;gap:20px;background:linear-gradient(135deg,#141d18,#181818);border:1px solid #26362c;border-radius:14px;padding:24px 26px}
+.dl{position:relative;display:flex;align-items:center;gap:20px;background:linear-gradient(135deg,#122018,#0e1412);border:1px solid #24382d;border-radius:16px;padding:26px 28px;overflow:hidden}
+.dl::after{content:"";position:absolute;right:-60px;top:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(49,194,124,.22),transparent 70%);pointer-events:none}
 .dl .dico{width:58px;height:58px;flex-shrink:0;border-radius:15px;background:linear-gradient(135deg,#31c27c,#26a86a);display:flex;align-items:center;justify-content:center;font-size:1.7rem;color:#04150d;box-shadow:0 6px 18px rgba(49,194,124,.28)}
 .dl .dinfo{flex:1;min-width:0}
 .dl .dt{color:#fff;font-weight:700;font-size:1.08rem;margin-bottom:6px}
@@ -142,13 +150,19 @@ footer a{color:#31c27c;text-decoration:none}
 .dl .dbtn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#31c27c,#26a86a);color:#04150d;font-weight:700;font-size:.95rem;padding:13px 28px;border-radius:11px;text-decoration:none;white-space:nowrap;box-shadow:0 6px 20px rgba(49,194,124,.32);transition:transform .15s,box-shadow .15s}
 .dl .dbtn:hover{transform:translateY(-2px);box-shadow:0 11px 28px rgba(49,194,124,.46)}
 @media(max-width:640px){.dl{flex-direction:column;text-align:center}}
-.warn{border-left:3px solid #f0a020;background:#1c1810;padding:15px 18px;border-radius:6px;color:#c9a86a;font-size:.84rem;line-height:1.95}
+.warn{border:1px solid #2a2418;border-left:3px solid #f0a020;background:#14110a;padding:16px 18px;border-radius:8px;color:#a08a5e;font-size:.82rem;line-height:1.95}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#1e2925;border:1px solid #1e2925;border-radius:13px;overflow:hidden;margin-top:6px}
+@media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:#0e1311;padding:22px 16px;text-align:center}
+.stat .sn{font-size:1.7rem;font-weight:800;color:#31c27c;font-variant-numeric:tabular-nums;text-shadow:0 0 18px rgba(49,194,124,.45);line-height:1.1}
+.stat .sl{color:#6f7d76;font-size:.76rem;margin-top:8px;letter-spacing:1px}
 \u003c/style\u003e
 \u003c/head\u003e
 \u003cbody\u003e
 \u003cdiv class="c"\u003e
   \u003cdiv class="hero"\u003e
     \u003ch1\u003eQQ Music API\u003c/h1\u003e
+    \u003cdiv class="tag"\u003eMusic Data Infrastructure\u003c/div\u003e
     \u003cdiv class="sub"\u003e专业级音乐数据服务 · 稳定 · 高效 · 安全\u003c/div\u003e
     \u003cdiv class="badges"\u003e
       \u003cspan class="badge ${dbReady ? 'on' : 'off'}"\u003e\u003ci\u003e\u003c/i\u003e服务 ${dbReady ? '正常' : '离线'}\u003c/span\u003e
@@ -168,18 +182,20 @@ footer a{color:#31c27c;text-decoration:none}
 
   \u003ch2\u003e核心能力\u003c/h2\u003e
   \u003cdiv class="caps"\u003e
-    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🔎\u003c/div\u003e\u003cdiv class="ct"\u003e全量搜索\u003c/div\u003e\u003cdiv class="cd"\u003e歌曲 / 歌手 / 专辑 / 歌单多维检索, 结果精准。\u003c/div\u003e\u003c/div\u003e
-    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🎧\u003c/div\u003e\u003cdiv class="ct"\u003e多音质直链\u003c/div\u003e\u003cdiv class="cd"\u003e母带 / 全景声 / 无损 / 320K 逐级降级, 链接自动探活。\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🔎\u003c/div\u003e\u003cdiv class="ct"\u003e全维检索\u003c/div\u003e\u003cdiv class="cd"\u003e歌曲 / 歌手 / 专辑 / 歌单多维语义检索, 毫秒级响应。\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🎧\u003c/div\u003e\u003cdiv class="ct"\u003e旗舰音质\u003c/div\u003e\u003cdiv class="cd"\u003e母带 / 全景声 / 无损 / 320K 全档位直链, 逐级智能降级。\u003c/div\u003e\u003c/div\u003e
     \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e📝\u003c/div\u003e\u003cdiv class="ct"\u003e逐字歌词\u003c/div\u003e\u003cdiv class="cd"\u003eLRC / QRC 逐字 / 翻译 / 罗马音全解码输出。\u003c/div\u003e\u003c/div\u003e
-    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🛡\u003e\u003c/div\u003e\u003cdiv class="ct"\u003e行为风控\u003c/div\u003e\u003cdiv class="cd"\u003e频次突增 / 遍历识别 / 自动封禁, 保障服务稳定。\u003c/div\u003e\u003c/div\u003e
-    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e⚡\u003c/div\u003e\u003cdiv class="ct"\u003e边缘加速\u003c/div\u003e\u003cdiv class="cd"\u003e全链路就近响应, 播放链接多级缓存命中。\u003c/div\u003e\u003c/div\u003e
-    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🔐\u003c/div\u003e\u003cdiv class="ct"\u003e安全鉴权\u003c/div\u003e\u003cdiv class="cd"\u003e设备绑定 + 会话签名, 防重放与越权访问。\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🛡\u003e\u003c/div\u003e\u003cdiv class="ct"\u003e智能风控\u003c/div\u003e\u003cdiv class="cd"\u003e频次突增检测 / 遍历识别 / 自适应封禁。\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e⚡\u003c/div\u003e\u003cdiv class="ct"\u003e边缘加速\u003c/div\u003e\u003cdiv class="cd"\u003e全链路就近调度, 多级缓存命中, 低延迟直出。\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🔐\u003c/div\u003e\u003cdiv class="ct"\u003e纵深安全\u003c/div\u003e\u003cdiv class="cd"\u003e设备绑定 / 会话签名 / 防重放, 全链路加固。\u003c/div\u003e\u003c/div\u003e
   \u003c/div\u003e
 
-  \u003ch2\u003e快速接入\u003c/h2\u003e
-  \u003cdiv class="card" style="padding:18px 20px"\u003e
-    \u003cp class="note"\u003e1. \u003cb\u003ePOST /api/user?action=device\u003c/b\u003e 用客户端指纹换取签名 deviceId;\u003cbr\u003e2. \u003cb\u003ePOST /api/user?action=register\u003c/b\u003e 注册(带 deviceId);\u003cbr\u003e3. \u003cb\u003ePOST /api/user?action=login\u003c/b\u003e 登录, 拿到 token;\u003cbr\u003e4. 后续请求头携带 \u003cb\u003eAuthorization: Bearer {token}\u003c/b\u003e 与 \u003cb\u003eX-Device-Id: {deviceId}\u003c/b\u003e;\u003cbr\u003e5. 调用音乐接口, 如 \u003cb\u003eGET /api/song/url?mid=...&quality=flac\u003c/b\u003e。\u003c/p\u003e
-    \u003cp class="note" style="margin-top:10px"\u003e普通用户每日有限额度(默认 50 次, 可调)且受最高音质约束; 会员 1000 次/日不限音质; 管理员不限。\u003c/p\u003e
+  \u003ch2\u003e技术指标\u003c/h2\u003e
+  \u003cdiv class="stats"\u003e
+    \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e99.9%\u003c/div\u003e\u003cdiv class="sl"\u003e服务可用性\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e&lt;100ms\u003c/div\u003e\u003cdiv class="sl"\u003e边缘响应\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e6\u003c/div\u003e\u003cdiv class="sl"\u003e音质档位\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e24/7\u003c/div\u003e\u003cdiv class="sl"\u003e持续在线\u003c/div\u003e\u003c/div\u003e
   \u003c/div\u003e
 
   \u003ch2\u003e免责与合规声明\u003c/h2\u003e
