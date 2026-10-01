@@ -102,23 +102,6 @@ async function generateIndexHtml(env) {
         } catch (e) { dbReady = false; }
     }
 
-    const API_LIST = [
-        ['/api/search', '搜索歌曲/歌手/专辑/歌单 (公开, IP 限流)'],
-        ['/api/song/url', '获取歌曲播放链接'],
-        ['/api/song/detail', '获取歌曲详情'],
-        ['/api/song/cover', '获取歌曲封面'],
-        ['/api/lyric', '获取歌词'],
-        ['/api/album', '获取专辑详情'],
-        ['/api/playlist', '获取歌单详情'],
-        ['/api/singer', '获取歌手信息'],
-        ['/api/top', '获取排行榜 (公开, IP 限流)'],
-        ['/api/app/update', 'APP 更新配置'],
-        ['/api/app/notice', 'APP 公告']
-    ];
-    const apiRows = API_LIST.map(function(a){
-        return '\u003ctr\u003e\u003ctd class="ep"\u003e' + a[0] + '\u003c/td\u003e\u003ctd class="desc"\u003e' + a[1] + '\u003c/td\u003e\u003c/tr\u003e';
-    }).join('');
-
     return `\u003c!DOCTYPE html\u003e
 \u003chtml lang="zh-CN"\u003e
 \u003chead\u003e
@@ -134,37 +117,39 @@ body{font-family:-apple-system,sans-serif;background:#0f0f0f;color:#e0e0e0;line-
 .hero{text-align:center;padding:30px 0 40px}
 .hero h1{font-size:2.2rem;color:#fff;letter-spacing:1px;margin-bottom:10px}
 .hero .sub{color:#666;font-size:.95rem}
-.hero .big{font-size:3rem;color:#31c27c;font-weight:700;margin:24px 0 4px;font-variant-numeric:tabular-nums}
-.hero .lbl{color:#555;font-size:.8rem;letter-spacing:2px;text-transform:uppercase}
 h2{font-size:1rem;color:#31c27c;margin:36px 0 14px;padding-bottom:8px;border-bottom:1px solid #222}
 .card{background:#181818;border:1px solid #222;border-radius:10px;overflow:hidden}
-table{width:100%;border-collapse:collapse;font-size:.88rem}
-th,td{padding:10px 16px;text-align:left;border-bottom:1px solid #222}
-th{color:#666;font-weight:500;font-size:.78rem;letter-spacing:1px;text-transform:uppercase}
-tr:last-child td{border-bottom:none}
-tr:hover{background:#1f1f1f}
-.ep{font-family:monospace;color:#4facfe}
-.ct{font-family:monospace;color:#31c27c;text-align:right;font-weight:600}
-.desc{color:#888}
-.empty{text-align:center;color:#555;padding:24px}
-footer{margin-top:50px;text-align:center;color:#333;font-size:.82rem}
+footer{margin-top:56px;text-align:center;color:#333;font-size:.82rem}
 footer a{color:#31c27c;text-decoration:none}
-.badges{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:22px 0 6px}
+.badges{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:22px 0 4px}
 .badge{display:inline-flex;align-items:center;gap:7px;background:#181818;border:1px solid #2a2a2a;border-radius:999px;padding:7px 16px;font-size:.85rem;color:#bbb}
 .badge i{width:8px;height:8px;border-radius:50%;display:inline-block;background:#666}
 .badge.on i{background:#31c27c;box-shadow:0 0 8px #31c27c}
 .badge.off i{background:#f44;box-shadow:0 0 8px #f44}
-.btn{display:inline-block;background:linear-gradient(135deg,#31c27c,#26a86a);color:#04150d;font-weight:700;padding:11px 24px;border-radius:8px;text-decoration:none;margin:6px 6px 0 0}
-.btn.ghost{background:#2a2a2a;color:#e0e0e0;border:1px solid #444}
-.note{color:#777;font-size:.82rem;line-height:1.9}
-.warn{border-left:3px solid #f0a020;background:#1c1810;padding:14px 16px;border-radius:6px;color:#c9a86a;font-size:.84rem;line-height:1.9}
+.note{color:#8a8a8a;font-size:.85rem;line-height:1.95}
+.caps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:640px){.caps{grid-template-columns:repeat(2,1fr)}}
+.cap{background:#151515;border:1px solid #222;border-radius:12px;padding:20px 18px;transition:border-color .2s,transform .2s,background .2s}
+.cap:hover{border-color:#31c27c;transform:translateY(-3px);background:#171f1a}
+.cap .ico{font-size:1.5rem;margin-bottom:12px;line-height:1}
+.cap .ct{color:#eaeaea;font-weight:600;font-size:.95rem;margin-bottom:6px}
+.cap .cd{color:#7a7a7a;font-size:.78rem;line-height:1.6}
+.dl{display:flex;align-items:center;gap:20px;background:linear-gradient(135deg,#141d18,#181818);border:1px solid #26362c;border-radius:14px;padding:24px 26px}
+.dl .dico{width:58px;height:58px;flex-shrink:0;border-radius:15px;background:linear-gradient(135deg,#31c27c,#26a86a);display:flex;align-items:center;justify-content:center;font-size:1.7rem;color:#04150d;box-shadow:0 6px 18px rgba(49,194,124,.28)}
+.dl .dinfo{flex:1;min-width:0}
+.dl .dt{color:#fff;font-weight:700;font-size:1.08rem;margin-bottom:6px}
+.dl .ds{color:#8a8a8a;font-size:.82rem;line-height:1.6}
+.dl .dbtn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#31c27c,#26a86a);color:#04150d;font-weight:700;font-size:.95rem;padding:13px 28px;border-radius:11px;text-decoration:none;white-space:nowrap;box-shadow:0 6px 20px rgba(49,194,124,.32);transition:transform .15s,box-shadow .15s}
+.dl .dbtn:hover{transform:translateY(-2px);box-shadow:0 11px 28px rgba(49,194,124,.46)}
+@media(max-width:640px){.dl{flex-direction:column;text-align:center}}
+.warn{border-left:3px solid #f0a020;background:#1c1810;padding:15px 18px;border-radius:6px;color:#c9a86a;font-size:.84rem;line-height:1.95}
 \u003c/style\u003e
 \u003c/head\u003e
 \u003cbody\u003e
 \u003cdiv class="c"\u003e
   \u003cdiv class="hero"\u003e
     \u003ch1\u003eQQ Music API\u003c/h1\u003e
-    \u003cdiv class="sub"\u003e基于 Cloudflare Workers + D1 的音乐 API 服务\u003c/div\u003e
+    \u003cdiv class="sub"\u003e专业级音乐数据服务 · 稳定 · 高效 · 安全\u003c/div\u003e
     \u003cdiv class="badges"\u003e
       \u003cspan class="badge ${dbReady ? 'on' : 'off'}"\u003e\u003ci\u003e\u003c/i\u003e服务 ${dbReady ? '正常' : '离线'}\u003c/span\u003e
       \u003cspan class="badge ${credSeeded ? 'on' : 'off'}"\u003e\u003ci\u003e\u003c/i\u003e上游凭证 ${credSeeded ? '就绪' : '未配置'}\u003c/span\u003e
@@ -172,24 +157,29 @@ footer a{color:#31c27c;text-decoration:none}
   \u003c/div\u003e
 
   \u003ch2\u003e客户端\u003c/h2\u003e
-  \u003cdiv class="card" style="padding:18px 20px"\u003e
-    \u003cp class="note" style="margin-bottom:12px"\u003e配套客户端通过本服务的 REST 接口工作。下载与更新配置见 \u003ca href="/api/app/update?platform=android" style="color:#31c27c"\u003e/api/app/update\u003c/a\u003e, 公告见 \u003ca href="/api/app/notice" style="color:#31c27c"\u003e/api/app/notice\u003c/a\u003e。\u003c/p\u003e
-    \u003ca class="btn" href="/api/app/update?platform=android"\u003e获取 Android 客户端\u003c/a\u003e
-    \u003ca class="btn ghost" href="/admin"\u003e管理控制台\u003c/a\u003e
+  \u003cdiv class="dl"\u003e
+    \u003cdiv class="dico"\u003e⬇\u003c/div\u003e
+    \u003cdiv class="dinfo"\u003e
+      \u003cdiv class="dt"\u003eAndroid 客户端\u003c/div\u003e
+      \u003cdiv class="ds"\u003e下载最新版本, 体验完整的音乐搜索、播放与歌词服务。安装包由服务端统一发布与版本管理。\u003c/div\u003e
+    \u003c/div\u003e
+    \u003ca class="dbtn" href="/api/app/update?platform=android"\u003e下载 APK\u003c/a\u003e
+  \u003c/div\u003e
+
+  \u003ch2\u003e核心能力\u003c/h2\u003e
+  \u003cdiv class="caps"\u003e
+    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🔎\u003c/div\u003e\u003cdiv class="ct"\u003e全量搜索\u003c/div\u003e\u003cdiv class="cd"\u003e歌曲 / 歌手 / 专辑 / 歌单多维检索, 结果精准。\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🎧\u003c/div\u003e\u003cdiv class="ct"\u003e多音质直链\u003c/div\u003e\u003cdiv class="cd"\u003e母带 / 全景声 / 无损 / 320K 逐级降级, 链接自动探活。\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e📝\u003c/div\u003e\u003cdiv class="ct"\u003e逐字歌词\u003c/div\u003e\u003cdiv class="cd"\u003eLRC / QRC 逐字 / 翻译 / 罗马音全解码输出。\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🛡\u003e\u003c/div\u003e\u003cdiv class="ct"\u003e行为风控\u003c/div\u003e\u003cdiv class="cd"\u003e频次突增 / 遍历识别 / 自动封禁, 保障服务稳定。\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e⚡\u003c/div\u003e\u003cdiv class="ct"\u003e边缘加速\u003c/div\u003e\u003cdiv class="cd"\u003e全链路就近响应, 播放链接多级缓存命中。\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🔐\u003c/div\u003e\u003cdiv class="ct"\u003e安全鉴权\u003c/div\u003e\u003cdiv class="cd"\u003e设备绑定 + 会话签名, 防重放与越权访问。\u003c/div\u003e\u003c/div\u003e
   \u003c/div\u003e
 
   \u003ch2\u003e快速接入\u003c/h2\u003e
   \u003cdiv class="card" style="padding:18px 20px"\u003e
     \u003cp class="note"\u003e1. \u003cb\u003ePOST /api/user?action=device\u003c/b\u003e 用客户端指纹换取签名 deviceId;\u003cbr\u003e2. \u003cb\u003ePOST /api/user?action=register\u003c/b\u003e 注册(带 deviceId);\u003cbr\u003e3. \u003cb\u003ePOST /api/user?action=login\u003c/b\u003e 登录, 拿到 token;\u003cbr\u003e4. 后续请求头携带 \u003cb\u003eAuthorization: Bearer {token}\u003c/b\u003e 与 \u003cb\u003eX-Device-Id: {deviceId}\u003c/b\u003e;\u003cbr\u003e5. 调用音乐接口, 如 \u003cb\u003eGET /api/song/url?mid=...&quality=flac\u003c/b\u003e。\u003c/p\u003e
     \u003cp class="note" style="margin-top:10px"\u003e普通用户每日有限额度(默认 50 次, 可调)且受最高音质约束; 会员 1000 次/日不限音质; 管理员不限。\u003c/p\u003e
-  \u003c/div\u003e
-
-  \u003ch2\u003e可用接口\u003c/h2\u003e
-  \u003cdiv class="card"\u003e
-    \u003ctable\u003e
-      \u003cthead\u003e\u003ctr\u003e\u003cth\u003e端点\u003c/th\u003e\u003cth\u003e说明\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e
-      \u003ctbody\u003e${apiRows}\u003c/tbody\u003e
-    \u003c/table\u003e
   \u003c/div\u003e
 
   \u003ch2\u003e免责与合规声明\u003c/h2\u003e
@@ -200,7 +190,7 @@ footer a{color:#31c27c;text-decoration:none}
     若权利方对本项目有任何异议, 请联系部署者及时下线相关内容。
   \u003c/div\u003e
 
-  \u003cfooter\u003ePowered by Cloudflare Workers · © iSun · 本项目仅供学习研究\u003c/footer\u003e
+  \u003cfooter\u003e© iSun · QQ Music API · 本项目仅供学习研究, 请勿用于商业用途\u003c/footer\u003e
 \u003c/div\u003e
 \u003c/body\u003e
 \u003c/html\u003e`;
