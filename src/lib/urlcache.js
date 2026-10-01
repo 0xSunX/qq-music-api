@@ -201,14 +201,16 @@ export async function listCache(db, page = 1, size = 20, keyword = "") {
     const kw = String(keyword || "").trim();
     let totalRow, rows;
     if (kw) {
-        // mid 前缀匹配走 idx_url_cache_mid 索引; url 是外链不做索引, 仅作兜底包含匹配
-        const prefix = kw + "%";
-        const contains = "%" + kw + "%";
-        totalRow = await db.prepare("SELECT COUNT(*) AS c FROM url_cache WHERE mid LIKE ? OR url LIKE ?").bind(prefix, contains).first();
+        // 只按 mid 前缀搜。url 里唯一有区分度的 token 就是 mid(其余是全表相同的前缀域名),
+        // 原 "url LIKE '%kw%'" 无法用索引、必然全表扫, 且几乎不提供额外检索价值, 故移除。
+        // 用范围比较 mid >= kw AND mid < kw||\uffff 代替 LIKE 'kw%':
+        // 纯 B-tree 范围扫描, 不依赖 collation/NOCASE, 稳定命中 idx_url_cache_mid。
+        const lo = kw, hi = kw + '\uffff';
+        totalRow = await db.prepare("SELECT COUNT(*) AS c FROM url_cache WHERE mid >= ? AND mid < ?").bind(lo, hi).first();
         rows = await db.prepare(
             `SELECT cache_key, mid, quality, url, actual_quality, created_at FROM url_cache
-             WHERE mid LIKE ? OR url LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?`
-        ).bind(prefix, contains, size, offset).all();
+             WHERE mid >= ? AND mid < ? ORDER BY created_at DESC LIMIT ? OFFSET ?`
+        ).bind(lo, hi, size, offset).all();
     } else {
         totalRow = await db.prepare("SELECT COUNT(*) AS c FROM url_cache").first();
         rows = await db.prepare(
@@ -235,8 +237,13 @@ export async function clearCache(db) {
 export async function getCacheStats(db) {
     await ensureUrlCacheTable(db);
     await ensureCacheStatsTable(db);
-    const s = await db.prepare("SELECT hits, misses FROM url_cache_stats WHERE id = 1").first();
-    const c = await db.prepare("SELECT COUNT(*) AS c FROM url_cache").first();
+    // 两次查询合并为单趟 D1 往返(batch), 减少一次网络 RTT
+    const _b = await db.batch([
+        db.prepare("SELECT hits, misses FROM url_cache_stats WHERE id = 1"),
+        db.prepare("SELECT COUNT(*) AS c FROM url_cache"),
+    ]);
+    const s = (_b[0] && _b[0].results && _b[0].results[0]) || null;
+    const c = (_b[1] && _b[1].results && _b[1].results[0]) || null;
     const hits = (s && s.hits) || 0;
     const misses = (s && s.misses) || 0;
     const total = hits + misses;
@@ -265,23 +272,22 @@ export async function getCacheStats(db) {
 export async function getCacheDistribution(db) {
     await ensureUrlCacheTable(db);
     const now = Math.floor(Date.now() / 1000);
-    const q = await db.prepare(
-        "SELECT quality, COUNT(*) AS c FROM url_cache GROUP BY quality ORDER BY c DESC"
-    ).all();
-    const aq = await db.prepare(
-        "SELECT COALESCE(actual_quality, quality) AS aq, COUNT(*) AS c FROM url_cache GROUP BY aq ORDER BY c DESC"
-    ).all();
-    // 新鲜度: 30 分钟内 / 30-60 分钟 / 1-24 小时 / 超过 1 天
-    const fresh = await db.prepare(`SELECT
+    // 四组分布查询合并为单趟 D1 往返(batch): 原为 4 次串行 RTT, 现为 1 次
+    const _d = await db.batch([
+        db.prepare("SELECT quality, COUNT(*) AS c FROM url_cache GROUP BY quality ORDER BY c DESC"),
+        db.prepare("SELECT COALESCE(actual_quality, quality) AS aq, COUNT(*) AS c FROM url_cache GROUP BY aq ORDER BY c DESC"),
+        db.prepare(`SELECT
         SUM(CASE WHEN created_at > ? THEN 1 ELSE 0 END) AS f30m,
         SUM(CASE WHEN created_at <= ? AND created_at > ? THEN 1 ELSE 0 END) AS f1h,
         SUM(CASE WHEN created_at <= ? AND created_at > ? THEN 1 ELSE 0 END) AS f24h,
         SUM(CASE WHEN created_at <= ? THEN 1 ELSE 0 END) AS fold
-        FROM url_cache`)
-        .bind(now - 1800, now - 1800, now - 3600, now - 3600, now - 86400, now - 86400).first();
-    const top = await db.prepare(
-        "SELECT mid, COUNT(*) AS c FROM url_cache GROUP BY mid ORDER BY c DESC LIMIT 10"
-    ).all();
+        FROM url_cache`).bind(now - 1800, now - 1800, now - 3600, now - 3600, now - 86400, now - 86400),
+        db.prepare("SELECT mid, COUNT(*) AS c FROM url_cache GROUP BY mid ORDER BY c DESC LIMIT 10"),
+    ]);
+    const q = _d[0] || { results: [] };
+    const aq = _d[1] || { results: [] };
+    const fresh = (_d[2] && _d[2].results && _d[2].results[0]) || null;
+    const top = _d[3] || { results: [] };
     return {
         byQuality: (q.results || []).map(r => ({ key: r.quality || 'unknown', count: r.c || 0 })),
         byActualQuality: (aq.results || []).map(r => ({ key: r.aq || 'unknown', count: r.c || 0 })),

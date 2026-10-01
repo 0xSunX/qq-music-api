@@ -53,11 +53,17 @@ export async function onRequest(context) {
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 locked_at INTEGER
             )`).run();
+            // 锁加 TTL(秒): 进程被平台强杀时 catch 不会执行, 旧锁会永久残留导致无法重试。
+            // 过期锁视为崩溃残留, 允许后来者接管, 避免"一次崩溃永久锁死"。
+            const LOCK_TTL = 300;
+            const nowTs = Math.floor(Date.now() / 1000);
             const lock = await env.DB.prepare(
-                "INSERT INTO setup_lock (id, locked_at) VALUES (1, ?) ON CONFLICT(id) DO NOTHING"
-            ).bind(Math.floor(Date.now() / 1000)).run();
+                "INSERT INTO setup_lock (id, locked_at) VALUES (1, ?) " +
+                "ON CONFLICT(id) DO UPDATE SET locked_at = excluded.locked_at " +
+                "WHERE setup_lock.locked_at IS NULL OR setup_lock.locked_at < ?"
+            ).bind(nowTs, nowTs - LOCK_TTL).run();
             if (!(lock.meta && lock.meta.changes > 0)) {
-                return errorResponse("初始化已在进行或已完成, 入口已锁定", 403);
+                return errorResponse("初始化正在由另一请求进行, 请稍后重试(若持续锁定, 5 分钟后可自动接管)", 403);
             }
 
             if (await isInitialized(env.DB)) {
@@ -77,28 +83,31 @@ export async function onRequest(context) {
                 return errorResponse("密码至少 6 位", 400);
             }
 
-            // 清空所有业务表(逐表执行, 失败记录到 warnings, 不再静默吞掉)
-            // 覆盖全部业务表, 含风控/签名相关表; 新表必须同步加入, 否则初始化后残留旧数据
-            const tables = ["credentials", "sessions", "usage_daily", "users", "api_stats", "app_open_daily", "url_cache", "url_cache_stats", "app_notices", "app_releases", "register_rate", "ip_rate", "login_rate", "device_registry", "risk_config", "risk_rate", "risk_mid", "risk_block", "risk_events", "req_nonce", "refresh_log"];
+            // 先把初始管理员写入 users(此时旧 users 若已存在需先清), 再清其余业务表。
+            // 顺序关键: 若先清 users 再建 admin 中途失败, 会留下"所有表空且无管理员"的危险中间态;
+            // 改为先清理 users 并立即建 admin, admin 落库后即便后续清表失败, 站点也已处于"已初始化"安全态。
             const warnings = [];
+            const now = Math.floor(Date.now() / 1000);
+            const salt = randomHex(16);
+            const hash = await hashPassword(password, salt);
+            const adminDevice = "setup-" + randomHex(8);
+            // 初始管理员: daily_limit=0 表示无限制, max_quality='master' 解除音质上限。
+            try { await env.DB.prepare("DELETE FROM users").run(); }
+            catch (e) { warnings.push(`users: ${e.message}`); }
+            const r = await env.DB.prepare(
+                `INSERT INTO users (username, password_hash, salt, role, level, device_id, daily_limit, max_quality, created_at, updated_at)
+                 VALUES (?, ?, ?, 'admin', 'vip', ?, 0, 'master', ?, ?)`
+            ).bind(username, hash, salt, adminDevice, now, now).run();
+
+            // 清空其余业务表(逐表执行, 失败记录到 warnings, 不再静默吞掉)
+            // 覆盖全部业务表, 含风控/签名相关表; 新表必须同步加入, 否则初始化后残留旧数据
+            const tables = ["credentials", "sessions", "usage_daily", "api_stats", "app_open_daily", "url_cache", "url_cache_stats", "app_notices", "app_releases", "register_rate", "ip_rate", "login_rate", "device_registry", "risk_config", "risk_rate", "risk_mid", "risk_block", "risk_events", "req_nonce", "refresh_log"];
             for (const t of tables) {
                 try { await env.DB.prepare("DELETE FROM " + t).run(); }
                 catch (e) { warnings.push(`${t}: ${e.message}`); }
             }
             // 重置自增
             try { await env.DB.prepare("DELETE FROM sqlite_sequence").run(); } catch (e) { /* 无自增表时忽略 */ }
-
-            // 创建初始管理员 (设备标识用随机值, 避免与 setup-init 固定串冲突)
-            const salt = randomHex(16);
-            const hash = await hashPassword(password, salt);
-            const now = Math.floor(Date.now() / 1000);
-            const adminDevice = "setup-" + randomHex(8);
-            // 初始管理员: daily_limit=0 表示无限制(配额分支按无限处理), max_quality='master' 解除音质上限。
-            // 旧代码写 100000 是"很大但有限", 与"管理员不限"的语义不符; 改为 0 显式表达无限制。
-            const r = await env.DB.prepare(
-                `INSERT INTO users (username, password_hash, salt, role, level, device_id, daily_limit, max_quality, created_at, updated_at)
-                 VALUES (?, ?, ?, 'admin', 'vip', ?, 0, 'master', ?, ?)`
-            ).bind(username, hash, salt, adminDevice, now, now).run();
 
             // 重建单行表默认数据: 上方清库清掉了行, 不重建会导致相关 UPDATE 命中 0 行而静默失效
             // 1) risk_config: 后台保存风控参数 UPDATE ... WHERE id=1

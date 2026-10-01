@@ -134,7 +134,7 @@ tr:hover{background:#222}
     <div class="chart"><h3>缓存条目 Top MID</h3><div id="chartTop"><div class="empty">暂无数据</div></div></div>
   </div>
   <div class="bar">
-    <input id="kw" placeholder="按 mid / URL 搜索">
+    <input id="kw" placeholder="按 mid 前缀搜索">
     <button id="load">加载</button>
     <button id="clear">清空缓存</button>
     <button id="resetmem" class="ghost">重置内存统计</button>

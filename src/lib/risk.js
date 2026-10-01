@@ -351,11 +351,9 @@ export async function inspectRequest(db, subject, endpoint, midList, level) {
 
     // 4) MID 遍历: 内存 60 秒去重计数, 零 D1
     if (midList && midList.length && midLimit > 0) {
-        const uniq = [];
-        for (let i = 0; i < midList.length; i++) {
-            const m = midList[i];
-            if (m && uniq.indexOf(m) < 0) uniq.push(m);
-        }
+        // 用 Set 去重(O(n)), 替代原 indexOf 的 O(n²) 热路径扫描:
+        // 既可防超长 mid 串放大 CPU, 又避免与 memMidCheck 内部 Set 重复劳动。
+        const uniq = Array.from(new Set(midList.filter(Boolean)));
         if (uniq.length) {
             const seen = memMidCheck(subject, uniq);
             if (seen > midLimit) {
@@ -405,15 +403,23 @@ export async function getRiskStats(db) {
     await ensureRiskTables(db);
     const now = nowSec();
     const dayStart = now - (now % 86400);
-    const active = await db.prepare('SELECT COUNT(*) AS c FROM risk_block WHERE blocked_until > ?').bind(now).first();
-    const todayEvents = await db.prepare('SELECT COUNT(*) AS c FROM risk_events WHERE created_at >= ?').bind(dayStart).first();
-    const totalEvents = await db.prepare('SELECT COUNT(*) AS c FROM risk_events').first();
-    const byRule = await db.prepare('SELECT rule, COUNT(*) AS c FROM risk_events GROUP BY rule ORDER BY c DESC').all();
-    const recent = await db.prepare('SELECT id, subject, rule, detail, created_at FROM risk_events ORDER BY id DESC LIMIT 10').all();
+    // 5 次查询合并为单趟 D1 往返(batch): 原为 5 次串行 RTT, 现为 1 次, 页面首屏明显更快
+    const _s = await db.batch([
+        db.prepare('SELECT COUNT(*) AS c FROM risk_block WHERE blocked_until > ?').bind(now),
+        db.prepare('SELECT COUNT(*) AS c FROM risk_events WHERE created_at >= ?').bind(dayStart),
+        db.prepare('SELECT COUNT(*) AS c FROM risk_events'),
+        db.prepare('SELECT rule, COUNT(*) AS c FROM risk_events GROUP BY rule ORDER BY c DESC'),
+        db.prepare('SELECT id, subject, rule, detail, created_at FROM risk_events ORDER BY id DESC LIMIT 10'),
+    ]);
+    const _r0 = (_s[0] && _s[0].results && _s[0].results[0]) || null;
+    const _r1 = (_s[1] && _s[1].results && _s[1].results[0]) || null;
+    const _r2 = (_s[2] && _s[2].results && _s[2].results[0]) || null;
+    const byRule = _s[3] || { results: [] };
+    const recent = _s[4] || { results: [] };
     return {
-        activeBlocks: (active && active.c) || 0,
-        todayEvents: (todayEvents && todayEvents.c) || 0,
-        totalEvents: (totalEvents && totalEvents.c) || 0,
+        activeBlocks: (_r0 && _r0.c) || 0,
+        todayEvents: (_r1 && _r1.c) || 0,
+        totalEvents: (_r2 && _r2.c) || 0,
         byRule: (byRule && byRule.results) || [],
         recent: (recent && recent.results) || [],
     };
