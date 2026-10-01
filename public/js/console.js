@@ -126,7 +126,14 @@
       return '<span class="jn">' + m + '</span>';
     });
   }
-  function syncBodyHl() { if (bodyHl) bodyHl.innerHTML = hlJson(bodyBox.value || '') + NL; }
+  function syncBodyHl() {
+    if (!bodyHl) return;
+    // 关键: 重写 innerHTML 会让 <pre> 的 scrollTop 归零, 与透明 textarea 的滚动错位,
+    // 表现为"光标/文字漂移, 滚一下才对上"。先存滚动位置, 写完再还原。
+    var st = bodyHl.scrollTop, sl = bodyHl.scrollLeft;
+    bodyHl.innerHTML = hlJson(bodyBox.value || '') + NL;
+    bodyHl.scrollTop = st; bodyHl.scrollLeft = sl;
+  }
   // 请求头高亮: 每行 "Key: Value", 键/值分别着色, 其余行灰显
   function hlHeaders(txt) {
     return String(txt || '').split(/\r?\n/).map(function (line) {
@@ -135,7 +142,12 @@
       return m[1] + '<span class="jk">' + esc(m[2]) + '</span><span class="at-dim">:</span><span class="js">' + esc(m[4]) + '</span>';
     }).join(NL);
   }
-  function syncHeadersHl() { if (headersHl) headersHl.innerHTML = hlHeaders(headersEl ? headersEl.value : '') + NL; }
+  function syncHeadersHl() {
+    if (!headersHl) return;
+    var st = headersHl.scrollTop, sl = headersHl.scrollLeft;
+    headersHl.innerHTML = hlHeaders(headersEl ? headersEl.value : '') + NL;
+    headersHl.scrollTop = st; headersHl.scrollLeft = sl;
+  }
   function copy(t) {
     if (navigator.clipboard) { navigator.clipboard.writeText(t); }
     else { var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
@@ -214,9 +226,15 @@
         if (hk && hv) hdrs[hk] = hv;
       });
     }
+    // 大小写不敏感的 header 存在性检测: 用户在请求头框里手填的值优先, 不被自动值覆盖
+    var hasHeader = function (name) {
+      var low = name.toLowerCase();
+      for (var k in hdrs) { if (Object.prototype.hasOwnProperty.call(hdrs, k) && k.toLowerCase() === low) return true; }
+      return false;
+    };
     var tk = localStorage.getItem('adminToken');
-    if (tk) hdrs['Authorization'] = 'Bearer ' + tk;
-    if (!hdrs['X-Device-Id']) hdrs['X-Device-Id'] = getDeviceId();
+    if (tk && !hasHeader('Authorization')) hdrs['Authorization'] = 'Bearer ' + tk;
+    if (!hasHeader('X-Device-Id')) hdrs['X-Device-Id'] = getDeviceId();
     if (api.method === 'POST') {
       if (!bodyBox) { if (statusEl) statusEl.textContent = 'Body 容器缺失'; return; }
       var raw = bodyBox.value.trim() || '{}';
@@ -315,6 +333,13 @@
       headersEl.addEventListener('input', syncHeadersHl);
       headersEl.addEventListener('scroll', function () { if (headersHl) { headersHl.scrollTop = headersEl.scrollTop; headersHl.scrollLeft = headersEl.scrollLeft; } });
       headersEl.addEventListener('focus', function () {
+        // 聚焦时把"自动附带"的请求头写进输入框, 便于查看与手动修改(仅当框为空时填充, 不覆盖已填内容)
+        if (!this.value.trim()) {
+          var lines = [];
+          try { var dv = getDeviceId(); if (dv) lines.push('X-Device-Id: ' + dv); } catch (e) {}
+          try { var tk = localStorage.getItem('adminToken'); if (tk) lines.push('Authorization: Bearer ' + tk); } catch (e) {}
+          if (lines.length) { this.value = lines.join(NL) + NL; syncHeadersHl(); }
+        }
         // 有 X-Setup-Key 行时, 光标直接落到冒号后, 方便粘贴密钥; 否则落到末尾
         var v = this.value || '';
         var idx = v.indexOf('X-Setup-Key:');
