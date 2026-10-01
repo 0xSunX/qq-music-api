@@ -25,7 +25,7 @@ import * as adminCache from "./api/admin/cache.js";
 import * as adminRisk from "./api/admin/risk.js";
 import * as adminCredPage from "./api/admin/credpage.js";
 import * as setup from "./api/setup.js";
-import { ensureStatsTable, incrementCount, getTotalCount, getAllStats } from "./lib/stats.js";
+import { ensureStatsTable, incrementCount, getTotalCount } from "./lib/stats.js";
 import { ensureUserTables, verifySession, reserveUsage, releaseUsage, countUsage, checkIpRate, VIP_DAILY_LIMIT } from "./lib/user.js";
 import { ensureRiskTables, inspectRequest, logRiskEvent } from "./lib/risk.js";
 import { verifyRequestSignature, getReqSignEnabled } from "./lib/reqsign.js";
@@ -87,21 +87,20 @@ const statsEndpoints = [
 ];
 
 /**
- * 生成首页 HTML
- * @param {number} totalCount 
+ * 生成首页 HTML —— 服务门户(不暴露运营数据)
+ * @param {object} env Workers 环境
  */
 async function generateIndexHtml(env) {
-    let totalCount = 0;
-    let stats = [];
+    // 服务状态: 只探测"是否就绪", 不暴露任何运营数据(总量/排行已移入 admin)。
+    let dbReady = false;
+    let credSeeded = false;
     if (env && env.DB) {
-        try { totalCount = await getTotalCount(env.DB); } catch (e) { console.error("统计失败:", e); }
-        try { stats = await getAllStats(env.DB); } catch (e) { console.error("明细失败:", e); }
+        try {
+            const r = await env.DB.prepare("SELECT COUNT(*) AS c FROM credentials WHERE id = 1 AND musickey IS NOT NULL AND musickey != ''").first();
+            credSeeded = !!(r && r.c > 0);
+            dbReady = true;
+        } catch (e) { dbReady = false; }
     }
-    const rows = stats.length
-        ? stats.map(function(s){
-            return '\u003ctr\u003e\u003ctd class="ep"\u003e' + s.endpoint + '\u003c/td\u003e\u003ctd class="ct"\u003e' + Number(s.count).toLocaleString() + '\u003c/td\u003e\u003c/tr\u003e';
-          }).join('')
-        : '\u003ctr\u003e\u003ctd colspan="2" class="empty"\u003e暂无调用数据\u003c/td\u003e\u003c/tr\u003e';
 
     const API_LIST = [
         ['/api/search', '搜索歌曲/歌手/专辑/歌单 (公开, IP 限流)'],
@@ -125,7 +124,9 @@ async function generateIndexHtml(env) {
 \u003chead\u003e
 \u003cmeta charset="UTF-8"\u003e
 \u003cmeta name="viewport" content="width=device-width,initial-scale=1"\u003e
-\u003ctitle\u003eQQ Music API\u003c/title\u003e
+\u003cmeta name="robots" content="noindex,nofollow,noarchive"\u003e
+\u003cmeta name="referrer" content="no-referrer"\u003e
+\u003ctitle\u003eQQ Music API · 服务门户\u003c/title\u003e
 \u003cstyle\u003e
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,sans-serif;background:#0f0f0f;color:#e0e0e0;line-height:1.6}
@@ -148,6 +149,15 @@ tr:hover{background:#1f1f1f}
 .empty{text-align:center;color:#555;padding:24px}
 footer{margin-top:50px;text-align:center;color:#333;font-size:.82rem}
 footer a{color:#31c27c;text-decoration:none}
+.badges{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:22px 0 6px}
+.badge{display:inline-flex;align-items:center;gap:7px;background:#181818;border:1px solid #2a2a2a;border-radius:999px;padding:7px 16px;font-size:.85rem;color:#bbb}
+.badge i{width:8px;height:8px;border-radius:50%;display:inline-block;background:#666}
+.badge.on i{background:#31c27c;box-shadow:0 0 8px #31c27c}
+.badge.off i{background:#f44;box-shadow:0 0 8px #f44}
+.btn{display:inline-block;background:linear-gradient(135deg,#31c27c,#26a86a);color:#04150d;font-weight:700;padding:11px 24px;border-radius:8px;text-decoration:none;margin:6px 6px 0 0}
+.btn.ghost{background:#2a2a2a;color:#e0e0e0;border:1px solid #444}
+.note{color:#777;font-size:.82rem;line-height:1.9}
+.warn{border-left:3px solid #f0a020;background:#1c1810;padding:14px 16px;border-radius:6px;color:#c9a86a;font-size:.84rem;line-height:1.9}
 \u003c/style\u003e
 \u003c/head\u003e
 \u003cbody\u003e
@@ -155,16 +165,23 @@ footer a{color:#31c27c;text-decoration:none}
   \u003cdiv class="hero"\u003e
     \u003ch1\u003eQQ Music API\u003c/h1\u003e
     \u003cdiv class="sub"\u003e基于 Cloudflare Workers + D1 的音乐 API 服务\u003c/div\u003e
-    \u003cdiv class="big"\u003e${Number(totalCount).toLocaleString()}\u003c/div\u003e
-    \u003cdiv class="lbl"\u003e累计调用次数\u003c/div\u003e
+    \u003cdiv class="badges"\u003e
+      \u003cspan class="badge ${dbReady ? 'on' : 'off'}"\u003e\u003ci\u003e\u003c/i\u003e服务 ${dbReady ? '正常' : '离线'}\u003c/span\u003e
+      \u003cspan class="badge ${credSeeded ? 'on' : 'off'}"\u003e\u003ci\u003e\u003c/i\u003e上游凭证 ${credSeeded ? '就绪' : '未配置'}\u003c/span\u003e
+    \u003c/div\u003e
   \u003c/div\u003e
 
-  \u003ch2\u003e接口调用排行\u003c/h2\u003e
-  \u003cdiv class="card"\u003e
-    \u003ctable\u003e
-      \u003cthead\u003e\u003ctr\u003e\u003cth\u003e接口\u003c/th\u003e\u003cth style="text-align:right"\u003e调用次数\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e
-      \u003ctbody\u003e${rows}\u003c/tbody\u003e
-    \u003c/table\u003e
+  \u003ch2\u003e客户端\u003c/h2\u003e
+  \u003cdiv class="card" style="padding:18px 20px"\u003e
+    \u003cp class="note" style="margin-bottom:12px"\u003e配套客户端通过本服务的 REST 接口工作。下载与更新配置见 \u003ca href="/api/app/update?platform=android" style="color:#31c27c"\u003e/api/app/update\u003c/a\u003e, 公告见 \u003ca href="/api/app/notice" style="color:#31c27c"\u003e/api/app/notice\u003c/a\u003e。\u003c/p\u003e
+    \u003ca class="btn" href="/api/app/update?platform=android"\u003e获取 Android 客户端\u003c/a\u003e
+    \u003ca class="btn ghost" href="/admin"\u003e管理控制台\u003c/a\u003e
+  \u003c/div\u003e
+
+  \u003ch2\u003e快速接入\u003c/h2\u003e
+  \u003cdiv class="card" style="padding:18px 20px"\u003e
+    \u003cp class="note"\u003e1. \u003cb\u003ePOST /api/user?action=device\u003c/b\u003e 用客户端指纹换取签名 deviceId;\u003cbr\u003e2. \u003cb\u003ePOST /api/user?action=register\u003c/b\u003e 注册(带 deviceId);\u003cbr\u003e3. \u003cb\u003ePOST /api/user?action=login\u003c/b\u003e 登录, 拿到 token;\u003cbr\u003e4. 后续请求头携带 \u003cb\u003eAuthorization: Bearer {token}\u003c/b\u003e 与 \u003cb\u003eX-Device-Id: {deviceId}\u003c/b\u003e;\u003cbr\u003e5. 调用音乐接口, 如 \u003cb\u003eGET /api/song/url?mid=...&quality=flac\u003c/b\u003e。\u003c/p\u003e
+    \u003cp class="note" style="margin-top:10px"\u003e普通用户每日有限额度(默认 50 次, 可调)且受最高音质约束; 会员 1000 次/日不限音质; 管理员不限。\u003c/p\u003e
   \u003c/div\u003e
 
   \u003ch2\u003e可用接口\u003c/h2\u003e
@@ -175,7 +192,15 @@ footer a{color:#31c27c;text-decoration:none}
     \u003c/table\u003e
   \u003c/div\u003e
 
-  \u003cfooter\u003ePowered by Cloudflare Workers · © iSun\u003c/footer\u003e
+  \u003ch2\u003e免责与合规声明\u003c/h2\u003e
+  \u003cdiv class="warn"\u003e
+    本项目为个人学习与技术研究性质的开源练习项目, 不对公众提供任何商业服务。\u003cbr\u003e
+    所有音乐数据、播放链接与元信息均来自第三方上游接口, 本项目不存储、不转售、不提供任何音频内容。\u003cbr\u003e
+    请勿将本项目用于任何商业用途或侵犯第三方权利的行为; 由此产生的一切后果由使用者自行承担。\u003cbr\u003e
+    若权利方对本项目有任何异议, 请联系部署者及时下线相关内容。
+  \u003c/div\u003e
+
+  \u003cfooter\u003ePowered by Cloudflare Workers · © iSun · 本项目仅供学习研究\u003c/footer\u003e
 \u003c/div\u003e
 \u003c/body\u003e
 \u003c/html\u003e`;
