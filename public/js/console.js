@@ -94,9 +94,14 @@
     if (descEl) descEl.innerHTML = badge + '<span class="jp">' + esc(api.path) + '</span> ' + esc(api.desc || '');
     (api.params || []).forEach(function (p) {
       var row = document.createElement('div'); row.className = 'at-row';
-      var lab = document.createElement('label'); lab.textContent = p.k + (p.req ? ' *' : '');
-      var inp = document.createElement('input'); inp.className = 'at-in'; inp.value = p.v || ''; inp.placeholder = p.k;
+      var lab = document.createElement('label'); lab.className = 'at-lab'; lab.textContent = p.k + (p.req ? ' *' : '');
+      var inp = document.createElement('input'); inp.className = 'at-in';
+      // 提示语走 placeholder: 聚焦/粘贴时自动消失, 无需手动删除
+      var hint = p.req ? '必填' : '可选';
+      if (p.v) hint += ' · 示例 ' + p.v;
+      inp.placeholder = hint;
       inp.setAttribute('data-k', p.k);
+      inp.setAttribute('title', p.k + (p.v ? '  示例: ' + p.v : ''));
       row.appendChild(lab); row.appendChild(inp); pbox.appendChild(row);
     });
     if (bodyWrap) bodyWrap.style.display = (api.method === 'POST') ? '' : 'none';

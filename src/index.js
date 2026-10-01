@@ -211,12 +211,15 @@ function generateConsoleHtml(totalCount) {
         .ex{background:#181818;padding:10px;border-radius:4px;font-family:monospace;font-size:.85rem;color:#aaa;margin-top:10px}
         footer{margin-top:50px;text-align:center;color:#444;font-size:.85rem}
         a{color:#31c27c;text-decoration:none}
-        .at-in,.at-btn,.at-resp{width:100%;background:#181818;border:1px solid #333;color:#e0e0e0;border-radius:4px;padding:8px;font-size:.9rem;font-family:monospace}
-        .at-in{margin-bottom:8px}
+        .at-in,.at-btn,.at-resp{width:100%;background:#181818;border:1px solid #333;color:#e0e0e0;border-radius:4px;padding:8px;font-size:.9rem;font-family:ui-monospace,Menlo,Consolas,monospace}
+        .at-in{margin-bottom:8px;color:#6A8759}
+        .at-in::placeholder{color:#5a5a5a;font-style:italic}
+        .at-in:focus{border-color:#31c27c;outline:none;box-shadow:0 0 0 2px rgba(49,194,124,.15)}
         .at-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
-        .at-row label{min-width:90px;color:#f0a020;font-family:monospace;font-size:.85rem}
-        .at-btn{cursor:pointer;background:#2a2a2a;color:#e0e0e0;border:1px solid #444;font-weight:600;padding:10px;margin-top:4px;border-radius:4px;transition:background .15s,border-color .15s}
-        .at-btn:hover{background:#333;border-color:#31c27c}
+        .at-row label{min-width:90px;color:#CC7832;font-family:monospace;font-size:.85rem}
+        .at-btn{cursor:pointer;background:linear-gradient(135deg,#31c27c,#26a86a);color:#04150d;border:none;font-weight:700;letter-spacing:.5px;padding:12px;margin-top:8px;border-radius:8px;box-shadow:0 4px 14px rgba(49,194,124,.28);transition:transform .15s ease,box-shadow .15s ease,filter .15s ease}
+        .at-btn:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(49,194,124,.42);filter:brightness(1.06)}
+        .at-btn:active{transform:translateY(0);box-shadow:0 3px 10px rgba(49,194,124,.3)}
         .nav-bar{margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap}
         .nav-btn{display:inline-block;background:#2a2a2a;border:1px solid #444;color:#e0e0e0;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none;transition:background .15s,border-color .15s}
         .nav-btn:hover{background:#333;border-color:#31c27c}
@@ -231,17 +234,24 @@ function generateConsoleHtml(totalCount) {
         .at-status{font-family:monospace;font-size:.8rem;color:#666;margin:6px 0;word-break:break-all}
         .at-status .ok{color:#31c27c;font-weight:700}
         .at-status .err{color:#f44;font-weight:700}
-        .at-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-        .at-tools button{flex:1;min-width:80px;cursor:pointer;background:#2a2a2a;border:1px solid #444;color:#e0e0e0;border-radius:4px;padding:6px;font-size:.8rem}
-        .at-tools button:hover{background:#333;border-color:#31c27c}
+        .at-tools{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+        .at-tools button{flex:1;min-width:84px;cursor:pointer;background:#20242b;border:1px solid #3a4250;color:#c8d0da;border-radius:7px;padding:9px 10px;font-size:.82rem;font-weight:600;letter-spacing:.3px;transition:background .15s ease,border-color .15s ease,color .15s ease,transform .15s ease}
+        .at-tools button:hover{background:#2a3038;border-color:#31c27c;color:#e6fff2;transform:translateY(-1px)}
+        .at-tools button:active{transform:translateY(0)}
+        #api-tester{background:linear-gradient(180deg,#1c2026,#161a1f);border:1px solid #2b333d;border-left:3px solid #31c27c;border-radius:10px;padding:18px 16px;box-shadow:0 6px 24px rgba(0,0,0,.28)}
+        #api-tester .h .p{font-size:1.05rem;letter-spacing:.5px}
+        #at-status{padding:6px 10px;background:#14181d;border-radius:6px;display:inline-block}
         #at-endpoint{color:#4facfe;font-weight:600;letter-spacing:.2px}
         #at-endpoint option{color:#e0e0e0;background:#181818}
         .at-resp{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;font-size:.9rem!important;line-height:1.55}
         .at-body-wrap2{position:relative;margin-bottom:8px}
         .at-hl{position:absolute;inset:0;margin:0;padding:8px;background:#181818;border:1px solid #333;border-radius:4px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;overflow:auto;pointer-events:none;color:#e0e0e0;tab-size:2}
         .at-body-ov{position:relative;z-index:2;background:transparent;color:transparent;caret-color:#31c27c;min-height:120px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;tab-size:2}
-        .jk{color:#569cd6}.js{color:#ce9178}.jn{color:#b5cea8}.jb{color:#569cd6}
-        .jp{color:#4ec9b0;font-weight:600}.jm{color:#dcdcaa}
+        /* 代码高亮配色 —— 参照 MT 语法(Metro/Darcula 深色主题) */
+        .jk{color:#CC7832}.js{color:#6A8759}.jn{color:#6897BB}.jb{color:#9876AA}
+        .jp{color:#E8BF6A;font-weight:600}.jm{color:#BBB529}
+        .at-key{color:#CC7832}.at-val{color:#6A8759}.at-num{color:#6897BB}
+        .at-comment{color:#808080;font-style:italic}
         .at-resp,.at-hl{background:#1e1e1e;border-color:#3c3c3c;color:#d4d4d4}
         .at-resp{color:#d4d4d4}
         .at-dim{color:#808080}
@@ -294,7 +304,7 @@ function generateConsoleHtml(totalCount) {
             <button id="at-goto">定位说明</button>
         </div>
         <div class="at-desc">自定义请求头 (每行一条: Key: Value, 例如 X-Setup-Key)</div>
-        <textarea id="at-headers" style="width:100%;min-height:56px;background:#181818;border:1px solid #333;color:#e0e0e0;border-radius:4px;padding:8px;font-family:monospace;font-size:.85rem;resize:vertical;box-sizing:border-box" placeholder="X-Setup-Key: 你的初始化密钥"></textarea>
+        <textarea id="at-headers" class="at-in" style="min-height:56px;resize:vertical;box-sizing:border-box;margin-bottom:8px" placeholder="每行一条 Key: Value（粘贴后提示自动消失）&#10;X-Device-Id 已自动带上，无需手填&#10;/api/setup 需：X-Setup-Key: 你的SETUP_KEY"></textarea>
 
         <button id="at-send" class="at-btn">发送请求</button>
         <div class="at-status" id="at-status">就绪</div>
