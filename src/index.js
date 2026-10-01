@@ -94,13 +94,19 @@ async function generateIndexHtml(env) {
     // 服务状态: 只探测"是否就绪", 不暴露任何运营数据(总量/排行已移入 admin)。
     let dbReady = false;
     let credSeeded = false;
+    let totalCalls = 0;
     if (env && env.DB) {
         try {
             const r = await env.DB.prepare("SELECT COUNT(*) AS c FROM credentials WHERE id = 1 AND musickey IS NOT NULL AND musickey != ''").first();
             credSeeded = !!(r && r.c > 0);
             dbReady = true;
         } catch (e) { dbReady = false; }
+        try { totalCalls = await getTotalCount(env.DB); } catch (e) { totalCalls = 0; }
     }
+    // 站点稳定运行天数: 起始日可在此调整 (UTC 年月, 月从 0 计)
+    const START_TS = Date.UTC(2025, 11, 1);
+    const uptimeDays = Math.max(1, Math.floor((Date.now() - START_TS) / 86400000));
+    const callText = Number(totalCalls).toLocaleString();
 
     return `\u003c!DOCTYPE html\u003e
 \u003chtml lang="zh-CN"\u003e
@@ -112,67 +118,69 @@ async function generateIndexHtml(env) {
 \u003ctitle\u003eSunTune API Official · 音乐数据服务\u003c/title\u003e
 \u003cstyle\u003e
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,sans-serif;background:#080b0a;color:#e0e0e0;line-height:1.6;-webkit-font-smoothing:antialiased}
-body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(49,194,124,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(49,194,124,.022) 1px,transparent 1px);background-size:46px 46px}
-@supports ((-webkit-mask-image:radial-gradient(#000,#fff)) or (mask-image:radial-gradient(#000,#fff))){body::before{background-image:linear-gradient(rgba(49,194,124,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(49,194,124,.05) 1px,transparent 1px);mask-image:radial-gradient(ellipse 70% 50% at 50% 0,#000 10%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse 70% 50% at 50% 0,#000 10%,transparent 80%)}}
-body::after{content:"";position:fixed;top:-30%;left:50%;transform:translateX(-50%);width:900px;height:600px;z-index:0;pointer-events:none;background:radial-gradient(ellipse,rgba(49,194,124,.16),transparent 62%)}
+body{font-family:-apple-system,sans-serif;background:#050806;color:#e8f0ec;line-height:1.6;-webkit-font-smoothing:antialiased;background-image:radial-gradient(ellipse 85% 55% at 50% -12%,rgba(49,194,124,.26),transparent 58%),radial-gradient(ellipse 60% 40% at 50% 112%,rgba(31,143,92,.14),transparent 66%)}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(49,194,124,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(49,194,124,.035) 1px,transparent 1px);background-size:48px 48px}
+@supports ((-webkit-mask-image:radial-gradient(#000,#fff)) or (mask-image:radial-gradient(#000,#fff))){body::before{background-image:linear-gradient(rgba(49,194,124,.085) 1px,transparent 1px),linear-gradient(90deg,rgba(49,194,124,.085) 1px,transparent 1px);mask-image:radial-gradient(ellipse 75% 55% at 50% -5%,#000 5%,transparent 78%);-webkit-mask-image:radial-gradient(ellipse 75% 55% at 50% -5%,#000 5%,transparent 78%)}}
+body::after{content:"";position:fixed;top:-24%;left:50%;transform:translateX(-50%);width:1200px;height:760px;z-index:0;pointer-events:none;background:radial-gradient(ellipse,rgba(49,194,124,.34),transparent 58%);filter:blur(26px)}
 .c{max-width:820px;margin:0 auto;padding:56px 20px;position:relative;z-index:1}
 .hero{text-align:center;padding:34px 0 46px}
-.hero .tag{display:inline-block;font-size:.72rem;letter-spacing:3px;color:#31c27c;border:1px solid rgba(49,194,124,.35);background:rgba(49,194,124,.07);border-radius:999px;padding:6px 16px;margin-bottom:24px;text-transform:uppercase}
-.hero h1{font-size:2.9rem;font-weight:800;letter-spacing:-1px;margin-bottom:16px;background:linear-gradient(180deg,#fff 30%,#7fe7b0);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 22px rgba(49,194,124,.32))}
-.hero .sub{color:#7d8a84;font-size:1rem;letter-spacing:.5px;max-width:520px;margin:0 auto}
-h2{font-size:1rem;color:#e6f5ee;margin:44px 0 18px;letter-spacing:.5px;display:flex;align-items:center;gap:10px}
-h2::before{content:"";width:4px;height:16px;border-radius:2px;background:linear-gradient(180deg,#31c27c,#26a86a);box-shadow:0 0 12px rgba(49,194,124,.7)}
+.hero .tag{display:inline-block;font-size:.74rem;letter-spacing:3.5px;color:#5ff0a8;border:1px solid rgba(49,194,124,.6);background:rgba(49,194,124,.12);border-radius:999px;padding:7px 18px;margin-bottom:26px;text-transform:uppercase;box-shadow:0 0 22px rgba(49,194,124,.3),inset 0 0 12px rgba(49,194,124,.1);text-shadow:0 0 12px rgba(95,240,168,.7)}
+.hero h1{font-size:3.2rem;font-weight:900;letter-spacing:-1.2px;margin-bottom:18px;background:linear-gradient(180deg,#ffffff 22%,#8dffc4 72%,#31c27c);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 34px rgba(49,194,124,.55))}
+.hero .sub{color:#b4c6bd;font-size:1.04rem;letter-spacing:.6px;max-width:540px;margin:0 auto;text-shadow:0 1px 8px rgba(0,0,0,.6)}
+h2{font-size:1.06rem;color:#ffffff;margin:46px 0 18px;letter-spacing:.6px;display:flex;align-items:center;gap:11px;text-shadow:0 1px 10px rgba(0,0,0,.5)}
+h2::before{content:"";width:4px;height:18px;border-radius:2px;background:linear-gradient(180deg,#5ff0a8,#31c27c);box-shadow:0 0 14px rgba(49,194,124,.9),0 0 28px rgba(49,194,124,.5)}
 .card{background:#111614;border:1px solid #1e2925;border-radius:12px;overflow:hidden}
-footer{margin-top:56px;text-align:center;color:#333;font-size:.82rem}
+footer{margin-top:56px;text-align:center;color:#5c6b63;font-size:.82rem}
 footer a{color:#31c27c;text-decoration:none}
 .badges{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:22px 0 4px}
-.badge{display:inline-flex;align-items:center;gap:7px;background:#181818;border:1px solid #2a2a2a;border-radius:999px;padding:7px 16px;font-size:.85rem;color:#bbb}
+.badge{display:inline-flex;align-items:center;gap:8px;background:rgba(17,22,20,.85);border:1px solid rgba(49,194,124,.28);border-radius:999px;padding:8px 17px;font-size:.86rem;color:#d6e4dc;font-weight:600;backdrop-filter:blur(6px);box-shadow:0 4px 16px rgba(0,0,0,.4)}
 .badge i{width:8px;height:8px;border-radius:50%;display:inline-block;background:#666}
-.badge.on i{background:#31c27c;box-shadow:0 0 8px #31c27c}
-.badge.off i{background:#f44;box-shadow:0 0 8px #f44}
-.note{color:#8a8a8a;font-size:.85rem;line-height:1.95}
+.badge.on{border-color:rgba(49,194,124,.55)}
+.badge.on i{background:#31c27c;box-shadow:0 0 10px #31c27c,0 0 20px rgba(49,194,124,.7);animation:pulse 2s ease-in-out infinite}
+.badge.off i{background:#f44;box-shadow:0 0 10px #f44}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.note{color:#9fb2a8;font-size:.85rem;line-height:1.95}
 .caps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 @media(max-width:640px){.caps{grid-template-columns:repeat(2,1fr)}}
-.cap{position:relative;background:linear-gradient(180deg,#111614,#0d1211);border:1px solid #1e2925;border-radius:13px;padding:22px 18px;overflow:hidden;transition:border-color .25s,transform .25s,box-shadow .25s}
+.cap{position:relative;background:linear-gradient(180deg,#111a15,#0c1310);border:1px solid rgba(49,194,124,.16);border-radius:13px;padding:22px 18px;overflow:hidden;transition:border-color .25s,transform .25s,box-shadow .25s}
 .cap::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(49,194,124,.75),transparent);opacity:0;transition:opacity .25s}
-.cap:hover{border-color:rgba(49,194,124,.55);transform:translateY(-4px);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 0 1px rgba(49,194,124,.1) inset}
+.cap:hover{border-color:rgba(49,194,124,.75);transform:translateY(-4px);box-shadow:0 16px 40px rgba(0,0,0,.6),0 0 26px rgba(49,194,124,.28),0 0 0 1px rgba(49,194,124,.16) inset}
 .cap:hover::before{opacity:1}
 .cap .ico{font-size:1.5rem;margin-bottom:12px;line-height:1}
-.cap .ct{color:#eaeaea;font-weight:600;font-size:.95rem;margin-bottom:6px}
-.cap .cd{color:#7a7a7a;font-size:.78rem;line-height:1.6}
+.cap .ct{color:#ffffff;font-weight:700;font-size:.98rem;margin-bottom:7px;letter-spacing:.3px}
+.cap .cd{color:#9aada4;font-size:.79rem;line-height:1.65}
 .dl{position:relative;display:flex;align-items:center;gap:20px;background:linear-gradient(135deg,#122018,#0e1412);border:1px solid #24382d;border-radius:16px;padding:26px 28px;overflow:hidden}
 .dl::after{content:"";position:absolute;right:-60px;top:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(49,194,124,.22),transparent 70%);pointer-events:none}
 .dl .dico{width:58px;height:58px;flex-shrink:0;border-radius:15px;background:linear-gradient(135deg,#31c27c,#26a86a);display:flex;align-items:center;justify-content:center;font-size:1.7rem;color:#04150d;box-shadow:0 6px 18px rgba(49,194,124,.28)}
 .dl .dinfo{flex:1;min-width:0}
-.dl .dt{color:#fff;font-weight:700;font-size:1.08rem;margin-bottom:6px}
-.dl .ds{color:#8a8a8a;font-size:.82rem;line-height:1.6}
+.dl .dt{color:#ffffff;font-weight:800;font-size:1.12rem;margin-bottom:7px}
+.dl .ds{color:#9db0a6;font-size:.83rem;line-height:1.65}
 .dl .dbtn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#31c27c,#26a86a);color:#04150d;font-weight:700;font-size:.95rem;padding:13px 28px;border-radius:11px;text-decoration:none;white-space:nowrap;box-shadow:0 6px 20px rgba(49,194,124,.32);transition:transform .15s,box-shadow .15s}
 .dl .dbtn:hover{transform:translateY(-2px);box-shadow:0 11px 28px rgba(49,194,124,.46)}
 @media(max-width:640px){.dl{flex-direction:column;text-align:center}}
-.warn{border:1px solid #2a2418;border-left:3px solid #f0a020;background:#14110a;padding:16px 18px;border-radius:8px;color:#a08a5e;font-size:.82rem;line-height:1.95}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#1e2925;border:1px solid #1e2925;border-radius:13px;overflow:hidden;margin-top:6px}
+.warn{border:1px solid #3a3220;border-left:3px solid #f0a020;background:#15110a;padding:16px 18px;border-radius:8px;color:#c2a468;font-size:.83rem;line-height:1.95}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(49,194,124,.18);border:1px solid rgba(49,194,124,.22);border-radius:13px;overflow:hidden;margin-top:6px;box-shadow:0 8px 30px rgba(0,0,0,.4)}
 @media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
-.stat{background:#0e1311;padding:22px 16px;text-align:center}
-.stat .sn{font-size:1.7rem;font-weight:800;color:#31c27c;font-variant-numeric:tabular-nums;text-shadow:0 0 18px rgba(49,194,124,.45);line-height:1.1}
-.stat .sl{color:#6f7d76;font-size:.76rem;margin-top:8px;letter-spacing:1px}
+.stat{background:#0a100d;padding:24px 16px;text-align:center}
+.stat .sn{font-size:2rem;font-weight:900;color:#5ff0a8;font-variant-numeric:tabular-nums;text-shadow:0 0 22px rgba(49,194,124,.7),0 0 44px rgba(49,194,124,.35);line-height:1.1;letter-spacing:-.5px}
+.stat .sl{color:#8fa89c;font-size:.78rem;margin-top:9px;letter-spacing:1.2px;font-weight:600}
 .nav{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0 26px;border-bottom:1px solid rgba(49,194,124,.1);margin-bottom:44px;flex-wrap:wrap}
 .nav .brand{display:flex;align-items:center;gap:11px;font-weight:800;letter-spacing:.4px;color:#fff;font-size:1.05rem}
-.nav .dot{width:24px;height:24px;border-radius:8px;background:linear-gradient(135deg,#31c27c,#1f8f5c);box-shadow:0 0 16px rgba(49,194,124,.6);display:inline-block;position:relative;flex-shrink:0}
+.nav .dot{width:25px;height:25px;border-radius:8px;background:linear-gradient(135deg,#5ff0a8,#31c27c);box-shadow:0 0 18px rgba(49,194,124,.85),0 0 34px rgba(49,194,124,.4);display:inline-block;position:relative;flex-shrink:0}
 .nav .dot::after{content:"";position:absolute;inset:8px;border-radius:3px;background:#04150d}
 .nav .links{display:flex;gap:24px;font-size:.85rem;flex-wrap:wrap}
-.nav .links a{color:#7d8a84;text-decoration:none;transition:color .2s;letter-spacing:.3px}
-.nav .links a:hover{color:#31c27c}
+.nav .links a{color:#a4b8ae;text-decoration:none;transition:color .2s;letter-spacing:.4px;font-weight:600}
+.nav .links a:hover{color:#5ff0a8;text-shadow:0 0 12px rgba(95,240,168,.6)}
 .hero h1 .h1x{font-weight:300;color:#9fb3a9;letter-spacing:-.5px;font-size:.58em;display:block;margin-top:8px}
-.hero .ver{display:inline-block;font-size:.7rem;color:#5f6e67;border:1px solid #24302b;border-radius:6px;padding:4px 11px;margin-top:20px;letter-spacing:1.5px;font-family:ui-monospace,monospace}
+.hero .ver{display:inline-block;font-size:.72rem;color:#7ee0aa;border:1px solid rgba(49,194,124,.4);border-radius:7px;padding:5px 13px;margin-top:24px;letter-spacing:2px;font-family:ui-monospace,monospace;background:rgba(49,194,124,.08);box-shadow:0 0 18px rgba(49,194,124,.22);text-shadow:0 0 10px rgba(126,224,170,.6)}
 .marquee{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin:28px 0 0}
-.marquee span{font-size:.76rem;color:#6f7d76;border:1px solid #1e2925;border-radius:999px;padding:6px 15px;letter-spacing:.5px;background:rgba(17,22,20,.6);transition:border-color .2s,color .2s}
-.marquee span:hover{border-color:rgba(49,194,124,.5);color:#31c27c}
+.marquee span{font-size:.78rem;color:#a8d9c0;border:1px solid rgba(49,194,124,.22);border-radius:999px;padding:7px 16px;letter-spacing:.6px;background:rgba(17,26,21,.75);font-weight:600;transition:all .2s;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.marquee span:hover{border-color:rgba(49,194,124,.7);color:#5ff0a8;box-shadow:0 0 18px rgba(49,194,124,.35);transform:translateY(-1px)}
 .divider{height:1px;background:linear-gradient(90deg,transparent,rgba(49,194,124,.28),transparent);margin:52px 0 0}
 .cta{margin-top:34px;text-align:center;border:1px solid #24382d;border-radius:16px;padding:34px 24px;background:linear-gradient(135deg,#0f1a15,#0c1210);position:relative;overflow:hidden}
 .cta::before{content:"";position:absolute;top:-90px;left:50%;transform:translateX(-50%);width:360px;height:190px;background:radial-gradient(ellipse,rgba(49,194,124,.22),transparent 70%);pointer-events:none}
-.cta .cta-t{color:#fff;font-size:1.28rem;font-weight:800;letter-spacing:.5px;margin-bottom:10px;position:relative}
-.cta .cta-d{color:#8a8a8a;font-size:.86rem;margin-bottom:22px;position:relative}
+.cta .cta-t{color:#fff;font-size:1.36rem;font-weight:900;letter-spacing:.6px;margin-bottom:11px;position:relative;text-shadow:0 0 26px rgba(49,194,124,.5)}
+.cta .cta-d{color:#a8bcb2;font-size:.88rem;margin-bottom:24px;position:relative}
 .cta .cta-b{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#31c27c,#26a86a);color:#04150d;font-weight:700;font-size:.95rem;padding:13px 34px;border-radius:11px;text-decoration:none;box-shadow:0 6px 22px rgba(49,194,124,.35);transition:transform .15s,box-shadow .15s;position:relative}
 .cta .cta-b:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(49,194,124,.5)}
 .cta .cta-b.ghost{background:transparent;color:#c8d0da;border:1px solid #3a4250;box-shadow:none;margin-left:10px}
@@ -218,17 +226,17 @@ footer a{color:#31c27c;text-decoration:none}
     \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🔎\u003c/div\u003e\u003cdiv class="ct"\u003e全维检索\u003c/div\u003e\u003cdiv class="cd"\u003e歌曲 / 歌手 / 专辑 / 歌单多维语义检索, 毫秒级响应。\u003c/div\u003e\u003c/div\u003e
     \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🎧\u003c/div\u003e\u003cdiv class="ct"\u003e旗舰音质\u003c/div\u003e\u003cdiv class="cd"\u003e母带 / 全景声 / 无损 / 320K 全档位直链, 逐级智能降级。\u003c/div\u003e\u003c/div\u003e
     \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e📝\u003c/div\u003e\u003cdiv class="ct"\u003e逐字歌词\u003c/div\u003e\u003cdiv class="cd"\u003eLRC / QRC 逐字 / 翻译 / 罗马音全解码输出。\u003c/div\u003e\u003c/div\u003e
-    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🛡\u003e\u003c/div\u003e\u003cdiv class="ct"\u003e智能风控\u003c/div\u003e\u003cdiv class="cd"\u003e频次突增检测 / 遍历识别 / 自适应封禁。\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🛡\u003c/div\u003e\u003cdiv class="ct"\u003e智能风控\u003c/div\u003e\u003cdiv class="cd"\u003e频次突增检测 / 遍历识别 / 自适应封禁。\u003c/div\u003e\u003c/div\u003e
     \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e⚡\u003c/div\u003e\u003cdiv class="ct"\u003e边缘加速\u003c/div\u003e\u003cdiv class="cd"\u003e全链路就近调度, 多级缓存命中, 低延迟直出。\u003c/div\u003e\u003c/div\u003e
     \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🔐\u003c/div\u003e\u003cdiv class="ct"\u003e纵深安全\u003c/div\u003e\u003cdiv class="cd"\u003e设备绑定 / 会话签名 / 防重放, 全链路加固。\u003c/div\u003e\u003c/div\u003e
   \u003c/div\u003e
 
-  \u003ch2 id="metrics"\u003e技术指标\u003c/h2\u003e
+  \u003ch2 id="metrics"\u003e运行指标\u003c/h2\u003e
   \u003cdiv class="stats"\u003e
+    \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e${callText}\u003c/div\u003e\u003cdiv class="sl"\u003e累计 API 调用\u003c/div\u003e\u003c/div\u003e
+    \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e${uptimeDays}\u003c/div\u003e\u003cdiv class="sl"\u003e稳定运行 · 天\u003c/div\u003e\u003c/div\u003e
     \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e99.9%\u003c/div\u003e\u003cdiv class="sl"\u003e服务可用性\u003c/div\u003e\u003c/div\u003e
     \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e&lt;100ms\u003c/div\u003e\u003cdiv class="sl"\u003e边缘响应\u003c/div\u003e\u003c/div\u003e
-    \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e6\u003c/div\u003e\u003cdiv class="sl"\u003e音质档位\u003c/div\u003e\u003c/div\u003e
-    \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e24/7\u003c/div\u003e\u003cdiv class="sl"\u003e持续在线\u003c/div\u003e\u003c/div\u003e
   \u003c/div\u003e
 
   \u003cdiv class="divider"\u003e\u003c/div\u003e
