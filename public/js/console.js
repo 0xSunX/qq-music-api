@@ -38,24 +38,8 @@
       try { el.setSelectionRange(hit.s, hit.s); } catch (e) {}
       return true;
     }
-    // 兜底: 首次点按未聚焦时光标未落位 -> 只清光标所在行内的占位, 不误伤其它字段
-    var lineStart = val.lastIndexOf(NL, Math.max(0, pos - 1));
-    lineStart = (lineStart < 0 && pos === 0) ? 0 : lineStart + 1;
-    var lineEnd = val.indexOf(NL, lineStart);
-    if (lineEnd < 0) lineEnd = val.length;
-    var before = val.slice(0, lineStart), seg = val.slice(lineStart, lineEnd), after = val.slice(lineEnd);
-    var list = phList.slice().sort(function (a, b) { return b.length - a.length; });
-    var changed = false;
-    for (var i = 0; i < list.length; i++) {
-      var ph = list[i]; if (!ph) continue;
-      var j = seg.indexOf(ph); if (j < 0) continue;
-      seg = seg.slice(0, j) + seg.slice(j + ph.length);
-      changed = true;
-    }
-    if (!changed) return false;
-    el.value = before + seg + after;
-    try { el.setSelectionRange(lineStart, lineStart); } catch (e) {}
-    return true;
+    // 未命中任何占位串: 一律不改 value、不动光标, 避免点非占位处光标漂移
+    return false;
   }
 
   var APIS = [
@@ -114,14 +98,14 @@
     '改用户等级': { userId: 2, level: 'vip' },
     '禁用/启用': { userId: 2, status: 1 },
     '删除用户': { userId: 2 },
-    '更新用户': { userId: 2, password: '新密码', maxQuality: '320', level: 'normal' },
+    '更新用户': { userId: 2, username: '新用户名', password: '新密码', dailyLimit: 50, maxQuality: '320', level: 'normal', status: 1 },
     '凭证(写)': { openid: 'QQ音乐OpenID', musicid: 'QQ号(数字)', musickey: 'MusicKey', refresh_token: '刷新令牌', login_type: 2 },
     '设备签发': { fingerprint: '设备指纹(6-128位稳定字符串)' },
     '登出': {},
     '我的信息': {},
     '初始化(写)': { username: 'admin', password: 'admin123' },
-    '公告(写)': { id: 'notice_1', type: 'popup', level: 'info', title: '标题', content: '正文', enabled: true },
-    '更新配置(写)': { platform: 'android', channel: 'official', latestVersion: '1.3.0', latestBuild: 130 }
+    '公告(写)': { id: 'notice_1', type: 'popup', level: 'info', title: '标题', content: '正文', actionText: '查看详情', actionUrl: 'https://example.com', forceShow: false, platforms: 'android', minVersion: '', maxVersion: '', channels: 'official', startAt: 0, endAt: 0, priority: 0, enabled: true },
+    '更新配置(写)': { platform: 'android', channel: 'official', latestVersion: '1.3.0', latestBuild: 130, minSupportBuild: 1, title: '发现新版本', changelog: '[]', downloadUrl: 'https://example.com/app.apk', fileSize: 0, fileHash: '', publishedAt: 0 }
   };
 
   function repeatInd(n) { var r = '', k; for (k = 0; k < n; k++) { r += '  '; } return r; }
@@ -316,7 +300,7 @@
       bodyBox.addEventListener('click', function () { if (clearPlaceholderAt(bodyBox, _bodyPh)) syncBodyHl(); });
       // focus 后补一次(等光标落位), 修复首次点按占位不消失
       bodyBox.addEventListener('focus', function () {
-        if (clearPlaceholderAt(bodyBox, _bodyPh)) syncBodyHl();
+        // 推迟到浏览器定位好光标后再判断, 避免边改 value 边设光标造成光标偏移漂移
         setTimeout(function () { if (clearPlaceholderAt(bodyBox, _bodyPh)) syncBodyHl(); }, 0);
       });
       bodyBox.addEventListener('input', syncBodyHl);
@@ -330,7 +314,18 @@
     if (headersEl) {
       headersEl.addEventListener('input', syncHeadersHl);
       headersEl.addEventListener('scroll', function () { if (headersHl) { headersHl.scrollTop = headersEl.scrollTop; headersHl.scrollLeft = headersEl.scrollLeft; } });
-      headersEl.addEventListener('focus', function () { try { this.select(); } catch (e) {} });
+      headersEl.addEventListener('focus', function () {
+        // 有 X-Setup-Key 行时, 光标直接落到冒号后, 方便粘贴密钥; 否则落到末尾
+        var v = this.value || '';
+        var idx = v.indexOf('X-Setup-Key:');
+        if (idx >= 0) {
+          var c = idx + 'X-Setup-Key:'.length;
+          if (v.charAt(c) === ' ') c++;
+          try { this.setSelectionRange(c, c); } catch (e) {}
+        } else {
+          try { this.setSelectionRange(v.length, v.length); } catch (e) {}
+        }
+      });
     }
     var gotoBtn = $('at-goto'); if (gotoBtn) gotoBtn.addEventListener('click', function () {
       var api = APIS[sel.value]; if (!api) return;
