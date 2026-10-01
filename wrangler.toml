@@ -23,3 +23,8 @@ crons = ["0 3 * * *"]
 [observability.logs]
 enabled = true
 invocation_logs = true
+
+# 静态前端资源 (A1): 调试台/管理页脚本抽离为独立文件
+# 部署后 /js/*.js 由 Assets 直接返回, 不再内嵌进 HTML 模板字符串
+[assets]
+directory = "./public"
