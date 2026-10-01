@@ -7,6 +7,33 @@
   var bodyBox = $('at-body'), bodyHl = $('at-body-hl'), headersEl = $('at-headers');
   var NL = String.fromCharCode(10);
 
+  // 收集 Body 预设对象里所有非空字符串值(占位提示), 用于聚焦时定位
+  var _bodyPh = [];
+  function collectPlaceholders(obj) {
+    var out = [];
+    (function walk(v) {
+      if (v == null) return;
+      if (typeof v === 'string') { if (v) out.push(v); return; }
+      if (Array.isArray(v)) { v.forEach(walk); return; }
+      if (typeof v === 'object') { Object.keys(v).forEach(function (k) { walk(v[k]); }); }
+    })(obj);
+    return out;
+  }
+  // 在 textarea 中, 把光标所在/紧邻的占位值整体选中, 便于直接粘贴覆盖
+  function selectPlaceholderAt(el, phList) {
+    if (!el || !phList || !phList.length) return false;
+    var val = el.value, pos = el.selectionStart, hit = null;
+    phList.forEach(function (ph) {
+      var idx = val.indexOf(ph);
+      while (idx >= 0) {
+        if (pos >= idx && pos <= idx + ph.length) { hit = { s: idx, e: idx + ph.length }; }
+        idx = val.indexOf(ph, idx + 1);
+      }
+    });
+    if (hit) { try { el.setSelectionRange(hit.s, hit.e); } catch (e) {} return true; }
+    return false;
+  }
+
   var APIS = [
     { group: '音乐业务', docKey: 'doc-search', tip: '搜索', path: '/api/search', method: 'GET', desc: '搜索(公开, IP 限流)', params: [{k:'keyword',v:'周杰伦',req:1},{k:'type',v:'song'},{k:'num',v:'10'},{k:'page',v:'1'}] },
     { group: '音乐业务', docKey: 'doc-songurl', tip: '播放链接', path: '/api/song/url', method: 'GET', desc: '播放链接(多音质降级)', params: [{k:'mid',v:'0039MnYb0qxYhV',req:1},{k:'quality',v:'320'}] },
@@ -37,11 +64,6 @@
     { group: '用户管理', docKey: 'doc-adminusers-status', tip: '禁用/启用', path: '/api/admin/users', method: 'POST', desc: '[admin] 禁用/启用用户', params: [{k:'action',v:'status'}] },
     { group: '用户管理', docKey: 'doc-adminusers-delete', tip: '删除用户', path: '/api/admin/users', method: 'POST', desc: '[admin] 删除用户', params: [{k:'action',v:'delete'}] },
     { group: '用户管理', docKey: 'doc-adminusers-update', tip: '更新用户', path: '/api/admin/users', method: 'POST', desc: '[admin] 部分更新用户(改密后强制会话失效)', params: [{k:'action',v:'update'}] },
-    { group: '风控防护', docKey: 'doc-risk', tip: '风控总览', path: '/api/admin/risk', method: 'GET', desc: '[admin] 风控总览', params: [{k:'action',v:'stats'}] },
-    { group: '风控防护', docKey: 'doc-risk', tip: '风控配置(读)', path: '/api/admin/risk', method: 'GET', desc: '[admin] 读风控参数', params: [{k:'action',v:'config'}] },
-    { group: '风控防护', docKey: 'doc-risk', tip: '风控配置(写)', path: '/api/admin/risk', method: 'POST', desc: '[admin] 更新风控参数', params: [{k:'action',v:'config'}] },
-    { group: '风控防护', docKey: 'doc-risk', tip: '封禁列表', path: '/api/admin/risk', method: 'GET', desc: '[admin] 当前封禁主体', params: [{k:'action',v:'blocks'},{k:'page',v:'1'},{k:'size',v:'20'}] },
-    { group: '风控防护', docKey: 'doc-risk', tip: '风控事件', path: '/api/admin/risk', method: 'GET', desc: '[admin] 风控事件审计', params: [{k:'action',v:'events'},{k:'page',v:'1'},{k:'size',v:'20'}] },
     { group: '系统维护', docKey: 'doc-setup', tip: '初始化(读)', path: '/api/setup', method: 'GET', desc: '查看初始化状态(公开)', params: [{k:'status',v:'1'}] },
     { group: '系统维护', docKey: 'doc-setup', tip: '初始化(写)', path: '/api/setup', method: 'POST', desc: '站点初始化(高危, 需 X-Setup-Key)', params: [] }
   ];
@@ -134,8 +156,15 @@
     if (!api) return;
     if (api.method === 'POST') {
       var v = DEFAULT_BODIES[api.tip];
-      if (v != null) { bodyBox.placeholder = ''; bodyBox.value = prettyBody(v); }
-      else { bodyBox.value = ''; bodyBox.placeholder = '该接口无预设 Body, 可留空或自行填写 JSON'; }
+      if (v != null) {
+        bodyBox.placeholder = '';
+        bodyBox.value = prettyBody(v);
+        _bodyPh = collectPlaceholders(v);
+      } else {
+        bodyBox.value = '';
+        bodyBox.placeholder = '该接口无预设 Body, 可留空或自行填写 JSON';
+        _bodyPh = [];
+      }
       syncBodyHl();
     }
   }
@@ -196,27 +225,38 @@
   }
 
   // 请求头按所选接口联动: value 预填可直接用的行, placeholder 说明该接口需要什么
+  // 只有确实需要额外请求头的接口才预设; 其余一律不预设, 避免误发无用头
   var HEADER_PRESET = {
-    '/api/setup': 'X-Setup-Key: ',
-    '/api/admin/credential': '',
-    '/api/admin/users': '',
-    '/api/admin/risk': ''
+    '/api/setup': 'X-Setup-Key: '
   };
+  // 按接口给出"需要什么请求头"的提示
   var HEADER_TIP = {
-    '/api/setup': '本接口需请求头 → X-Setup-Key: 你的SETUP_KEY（只填冒号后的密钥，可直接粘贴）',
+    '/api/setup': '本接口需要请求头 → X-Setup-Key: 你的SETUP_KEY（只填冒号后的密钥，可直接粘贴）',
     '/api/user?action=device': '公开接口, 无需额外请求头',
+    '/api/user?action=register': '公开接口, 无需额外请求头',
+    '/api/user?action=login': '公开接口, 无需额外请求头(deviceId 在 Body 里)',
     '/api/admin/credential': '[admin] 无需额外请求头, Authorization 已自动附带',
-    '/api/admin/users': '[admin] 无需额外请求头, Authorization 已自动附带',
-    '/api/admin/risk': '[admin] 无需额外请求头, Authorization 已自动附带'
+    '/api/admin/users': '[admin] 无需额外请求头, Authorization 已自动附带'
   };
-  var HEADER_DEFAULT_TIP = '普通接口无需手填请求头; Authorization 与 X-Device-Id 已自动附加';
+  var HEADER_DEFAULT_TIP = '该接口无需手填请求头; Authorization 与 X-Device-Id 已自动附加';
+  // 记录上一次"自动预设"的值, 切换接口时据此清除, 不误删用户手填内容
+  var _lastAutoHeader = '';
   function applyHeaderHint() {
     if (!headersEl || !sel) return;
     var api = APIS[sel.value];
     if (!api) return;
     headersEl.placeholder = HEADER_TIP[api.path] || HEADER_DEFAULT_TIP;
+    // 当前框里的值若正是上次自动填的, 先清掉, 避免带到不需要请求头的接口
+    if (_lastAutoHeader && headersEl.value.trim() === _lastAutoHeader.trim()) {
+      headersEl.value = '';
+    }
     var preset = HEADER_PRESET[api.path];
-    if (preset && !headersEl.value.trim()) { headersEl.value = preset; }
+    if (preset) {
+      headersEl.value = preset;
+      _lastAutoHeader = preset;
+    } else {
+      _lastAutoHeader = '';
+    }
   }
 
   function init() {
@@ -237,7 +277,8 @@
       return;
     }
     if (bodyBox) {
-      bodyBox.addEventListener('focus', function () { try { this.select(); } catch (e) {} });
+      bodyBox.addEventListener('click', function () { if (selectPlaceholderAt(bodyBox, _bodyPh)) syncBodyHl(); });
+      bodyBox.addEventListener('focus', function () { if (!selectPlaceholderAt(bodyBox, _bodyPh)) { try { this.select(); } catch (e) {} } });
       bodyBox.addEventListener('input', syncBodyHl);
       bodyBox.addEventListener('scroll', function () { if (bodyHl) { bodyHl.scrollTop = bodyBox.scrollTop; bodyHl.scrollLeft = bodyBox.scrollLeft; } });
     }
