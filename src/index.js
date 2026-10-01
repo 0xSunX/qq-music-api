@@ -109,7 +109,7 @@ async function generateIndexHtml(env) {
 \u003cmeta name="viewport" content="width=device-width,initial-scale=1"\u003e
 \u003cmeta name="robots" content="noindex,nofollow,noarchive"\u003e
 \u003cmeta name="referrer" content="no-referrer"\u003e
-\u003ctitle\u003eQQ Music API · 服务门户\u003c/title\u003e
+\u003ctitle\u003eSunTune API Official · 音乐数据服务\u003c/title\u003e
 \u003cstyle\u003e
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,sans-serif;background:#080b0a;color:#e0e0e0;line-height:1.6;-webkit-font-smoothing:antialiased}
@@ -156,21 +156,54 @@ footer a{color:#31c27c;text-decoration:none}
 .stat{background:#0e1311;padding:22px 16px;text-align:center}
 .stat .sn{font-size:1.7rem;font-weight:800;color:#31c27c;font-variant-numeric:tabular-nums;text-shadow:0 0 18px rgba(49,194,124,.45);line-height:1.1}
 .stat .sl{color:#6f7d76;font-size:.76rem;margin-top:8px;letter-spacing:1px}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0 26px;border-bottom:1px solid rgba(49,194,124,.1);margin-bottom:44px;flex-wrap:wrap}
+.nav .brand{display:flex;align-items:center;gap:11px;font-weight:800;letter-spacing:.4px;color:#fff;font-size:1.05rem}
+.nav .dot{width:24px;height:24px;border-radius:8px;background:linear-gradient(135deg,#31c27c,#1f8f5c);box-shadow:0 0 16px rgba(49,194,124,.6);display:inline-block;position:relative;flex-shrink:0}
+.nav .dot::after{content:"";position:absolute;inset:8px;border-radius:3px;background:#04150d}
+.nav .links{display:flex;gap:24px;font-size:.85rem;flex-wrap:wrap}
+.nav .links a{color:#7d8a84;text-decoration:none;transition:color .2s;letter-spacing:.3px}
+.nav .links a:hover{color:#31c27c}
+.hero h1 .h1x{font-weight:300;color:#9fb3a9;letter-spacing:-.5px;font-size:.58em;display:block;margin-top:8px}
+.hero .ver{display:inline-block;font-size:.7rem;color:#5f6e67;border:1px solid #24302b;border-radius:6px;padding:4px 11px;margin-top:20px;letter-spacing:1.5px;font-family:ui-monospace,monospace}
+.marquee{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin:28px 0 0}
+.marquee span{font-size:.76rem;color:#6f7d76;border:1px solid #1e2925;border-radius:999px;padding:6px 15px;letter-spacing:.5px;background:rgba(17,22,20,.6);transition:border-color .2s,color .2s}
+.marquee span:hover{border-color:rgba(49,194,124,.5);color:#31c27c}
+.divider{height:1px;background:linear-gradient(90deg,transparent,rgba(49,194,124,.28),transparent);margin:52px 0 0}
+.cta{margin-top:34px;text-align:center;border:1px solid #24382d;border-radius:16px;padding:34px 24px;background:linear-gradient(135deg,#0f1a15,#0c1210);position:relative;overflow:hidden}
+.cta::before{content:"";position:absolute;top:-90px;left:50%;transform:translateX(-50%);width:360px;height:190px;background:radial-gradient(ellipse,rgba(49,194,124,.22),transparent 70%);pointer-events:none}
+.cta .cta-t{color:#fff;font-size:1.28rem;font-weight:800;letter-spacing:.5px;margin-bottom:10px;position:relative}
+.cta .cta-d{color:#8a8a8a;font-size:.86rem;margin-bottom:22px;position:relative}
+.cta .cta-b{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#31c27c,#26a86a);color:#04150d;font-weight:700;font-size:.95rem;padding:13px 34px;border-radius:11px;text-decoration:none;box-shadow:0 6px 22px rgba(49,194,124,.35);transition:transform .15s,box-shadow .15s;position:relative}
+.cta .cta-b:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(49,194,124,.5)}
+.cta .cta-b.ghost{background:transparent;color:#c8d0da;border:1px solid #3a4250;box-shadow:none;margin-left:10px}
+.cta .cta-b.ghost:hover{border-color:#31c27c;color:#31c27c}
+@media(max-width:640px){.cta .cta-b.ghost{margin:10px 0 0 0}}
 \u003c/style\u003e
 \u003c/head\u003e
 \u003cbody\u003e
 \u003cdiv class="c"\u003e
-  \u003cdiv class="hero"\u003e
-    \u003ch1\u003eQQ Music API\u003c/h1\u003e
+  \u003cdiv class="nav"\u003e
+    \u003cdiv class="brand"\u003e\u003cspan class="dot"\u003e\u003c/span\u003eSunTune\u003c/div\u003e
+    \u003cdiv class="links"\u003e\n      \u003ca href="#client"\u003e客户端\u003c/a\u003e
+      \u003ca href="#caps"\u003e核心能力\u003c/a\u003e
+      \u003ca href="#metrics"\u003e技术指标\u003c/a\u003e
+    \u003c/div\u003e
+  \u003c/div\u003e
+\n  \u003cdiv class="hero"\u003e
     \u003cdiv class="tag"\u003eMusic Data Infrastructure\u003c/div\u003e
+    \u003ch1\u003eSunTune\u003cspan class="h1x"\u003eAPI Official\u003c/span\u003e\u003c/h1\u003e
     \u003cdiv class="sub"\u003e专业级音乐数据服务 · 稳定 · 高效 · 安全\u003c/div\u003e
     \u003cdiv class="badges"\u003e
       \u003cspan class="badge ${dbReady ? 'on' : 'off'}"\u003e\u003ci\u003e\u003c/i\u003e服务 ${dbReady ? '正常' : '离线'}\u003c/span\u003e
       \u003cspan class="badge ${credSeeded ? 'on' : 'off'}"\u003e\u003ci\u003e\u003c/i\u003e上游凭证 ${credSeeded ? '就绪' : '未配置'}\u003c/span\u003e
     \u003c/div\u003e
+    \u003cdiv class="marquee"\u003e
+      \u003cspan\u003e高可用\u003c/span\u003e\u003cspan\u003e低延迟\u003c/span\u003e\u003cspan\u003e全音质\u003c/span\u003e\u003cspan\u003e逐字歌词\u003c/span\u003e\u003cspan\u003e安全鉴权\u003c/span\u003e\u003cspan\u003e智能风控\u003c/span\u003e
+    \u003c/div\u003e
+    \u003cdiv class="ver"\u003eSUNTUNE CORE · BUILD 1.0\u003c/div\u003e
   \u003c/div\u003e
 
-  \u003ch2\u003e客户端\u003c/h2\u003e
+  \u003ch2 id="client"\u003e客户端\u003c/h2\u003e
   \u003cdiv class="dl"\u003e
     \u003cdiv class="dico"\u003e⬇\u003c/div\u003e
     \u003cdiv class="dinfo"\u003e
@@ -180,7 +213,7 @@ footer a{color:#31c27c;text-decoration:none}
     \u003ca class="dbtn" href="/api/app/update?platform=android"\u003e下载 APK\u003c/a\u003e
   \u003c/div\u003e
 
-  \u003ch2\u003e核心能力\u003c/h2\u003e
+  \u003ch2 id="caps"\u003e核心能力\u003c/h2\u003e
   \u003cdiv class="caps"\u003e
     \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🔎\u003c/div\u003e\u003cdiv class="ct"\u003e全维检索\u003c/div\u003e\u003cdiv class="cd"\u003e歌曲 / 歌手 / 专辑 / 歌单多维语义检索, 毫秒级响应。\u003c/div\u003e\u003c/div\u003e
     \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🎧\u003c/div\u003e\u003cdiv class="ct"\u003e旗舰音质\u003c/div\u003e\u003cdiv class="cd"\u003e母带 / 全景声 / 无损 / 320K 全档位直链, 逐级智能降级。\u003c/div\u003e\u003c/div\u003e
@@ -190,12 +223,20 @@ footer a{color:#31c27c;text-decoration:none}
     \u003cdiv class="cap"\u003e\u003cdiv class="ico"\u003e🔐\u003c/div\u003e\u003cdiv class="ct"\u003e纵深安全\u003c/div\u003e\u003cdiv class="cd"\u003e设备绑定 / 会话签名 / 防重放, 全链路加固。\u003c/div\u003e\u003c/div\u003e
   \u003c/div\u003e
 
-  \u003ch2\u003e技术指标\u003c/h2\u003e
+  \u003ch2 id="metrics"\u003e技术指标\u003c/h2\u003e
   \u003cdiv class="stats"\u003e
     \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e99.9%\u003c/div\u003e\u003cdiv class="sl"\u003e服务可用性\u003c/div\u003e\u003c/div\u003e
     \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e&lt;100ms\u003c/div\u003e\u003cdiv class="sl"\u003e边缘响应\u003c/div\u003e\u003c/div\u003e
     \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e6\u003c/div\u003e\u003cdiv class="sl"\u003e音质档位\u003c/div\u003e\u003c/div\u003e
     \u003cdiv class="stat"\u003e\u003cdiv class="sn"\u003e24/7\u003c/div\u003e\u003cdiv class="sl"\u003e持续在线\u003c/div\u003e\u003c/div\u003e
+  \u003c/div\u003e
+
+  \u003cdiv class="divider"\u003e\u003c/div\u003e
+
+  \u003cdiv class="cta"\u003e
+    \u003cdiv class="cta-t"\u003e开启高品质音乐体验\u003c/div\u003e
+    \u003cdiv class="cta-d"\u003e下载客户端, 立即接入 SunTune API Official 稳定服务\u003c/div\u003e
+    \u003ca class="cta-b" href="/api/app/update?platform=android"\u003e⬇ 下载客户端\u003c/a\u003e
   \u003c/div\u003e
 
   \u003ch2\u003e免责与合规声明\u003c/h2\u003e
@@ -206,7 +247,7 @@ footer a{color:#31c27c;text-decoration:none}
     若权利方对本项目有任何异议, 请联系部署者及时下线相关内容。
   \u003c/div\u003e
 
-  \u003cfooter\u003e© iSun · QQ Music API · 本项目仅供学习研究, 请勿用于商业用途\u003c/footer\u003e
+  \u003cfooter\u003e© SunTune · SunTune API Official · 本项目仅供学习研究, 请勿用于商业用途\u003c/footer\u003e
 \u003c/div\u003e
 \u003c/body\u003e
 \u003c/html\u003e`;
@@ -219,7 +260,7 @@ function generateConsoleHtml(totalCount) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="app-build" content="cachefix-v1">
-    <title>QQ Music API</title>
+    <title>SunTune API Official · 管理控制台</title>
     <script src="/js/device.js"></script>
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
@@ -311,7 +352,7 @@ function generateConsoleHtml(totalCount) {
 </div>
 <script src="/js/login-gate.js"></script>
 <div class="c">
-    <h1>QQ Music API</h1>
+    <h1>SunTune API Official</h1>
     <button id="backTop" title="回到顶部">⬆</button>
     <div class="nav-bar">
         <a href="/admin/users" class="nav-btn">👥 用户管理</a>
